@@ -17,6 +17,9 @@ NO_PREFIX = "хуй"
 NO_SUFFIX = "но"
 HU_PREFIX = "ху"
 
+MAX_COMPLIMENT_NAMES = frozenset({"макс", "максим", "максон"})
+MAX_COMPLIMENT_REPLY = "Макс — красавчик"
+
 VOWEL_PREFIX = {
     "о": "хуй",
     "и": "хуи",
@@ -242,7 +245,18 @@ def parody_word(word: str) -> str:
     return _join_parody(prefix, suffix)
 
 
+def _special_last_word_reply(text: str) -> str | None:
+    last = _last_word(text)
+    if last and last.lower() in MAX_COMPLIMENT_NAMES:
+        return MAX_COMPLIMENT_REPLY
+    return None
+
+
 def parody_with_rules(text: str) -> str | None:
+    special = _special_last_word_reply(text)
+    if special:
+        return special
+
     hyphen_parody = _parody_hyphen_to(text)
     if hyphen_parody:
         return hyphen_parody
