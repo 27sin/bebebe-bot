@@ -17,8 +17,10 @@ NO_PREFIX = "хуй"
 NO_SUFFIX = "но"
 HU_PREFIX = "ху"
 
-MAX_COMPLIMENT_NAMES = frozenset({"макс", "максим", "максон"})
-MAX_COMPLIMENT_REPLY = "Макс — красавчик"
+_SPECIAL_LAST_WORD_REPLIES: tuple[tuple[frozenset[str], str], ...] = (
+    (frozenset({"макс", "максим", "максон"}), "Макс — красавчик"),
+    (frozenset({"женя", "евгений", "женек", "женёк"}), "Женя — пидор❤"),
+)
 
 VOWEL_PREFIX = {
     "о": "хуй",
@@ -247,8 +249,12 @@ def parody_word(word: str) -> str:
 
 def _special_last_word_reply(text: str) -> str | None:
     last = _last_word(text)
-    if last and last.lower() in MAX_COMPLIMENT_NAMES:
-        return MAX_COMPLIMENT_REPLY
+    if not last:
+        return None
+    normalized = last.lower()
+    for names, reply in _SPECIAL_LAST_WORD_REPLIES:
+        if normalized in names:
+            return reply
     return None
 
 
