@@ -9,7 +9,7 @@ cd "$APP_DIR"
 
 git fetch origin "$BRANCH"
 git checkout "$BRANCH"
-git pull origin "$BRANCH"
+git reset --hard "origin/$BRANCH"
 
 if [[ ! -d .venv ]]; then
   python3 -m venv .venv
