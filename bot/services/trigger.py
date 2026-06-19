@@ -4,7 +4,7 @@ import random
 
 from aiogram.types import Message
 
-from bot.services.settings import get_effective_reply_probability
+from bot.services.settings import get_effective_reply_probability, is_user_ignored
 
 _bot_id: int | None = None
 _bot_username: str | None = None
@@ -34,6 +34,10 @@ def should_respond(message: Message) -> bool:
     if _bot_id is None or not message.from_user:
         return False
 
+    user = message.from_user
+    if is_user_ignored(message.chat.id, user.id, user.username):
+        return False
+
     if _is_bot_mentioned(message):
         return True
 
@@ -41,7 +45,6 @@ def should_respond(message: Message) -> bool:
     if reply and reply.from_user and reply.from_user.id == _bot_id:
         return True
 
-    user = message.from_user
     probability = get_effective_reply_probability(
         message.chat.id,
         user.id,

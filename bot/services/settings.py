@@ -23,6 +23,8 @@ def _normalize_entry(entry: Any) -> dict[str, Any]:
         result["cooldown_seconds"] = float(entry["cooldown_seconds"])
     if isinstance(entry.get("users"), dict):
         result["users"] = {str(key): float(value) for key, value in entry["users"].items()}
+    if isinstance(entry.get("ignored"), list):
+        result["ignored"] = [str(item) for item in entry["ignored"]]
     return result
 
 
@@ -204,3 +206,86 @@ def clear_reply_cooldown(chat_id: int) -> None:
     else:
         chats.pop(str(chat_id), None)
     _save_chats(chats)
+
+
+def _ignored_keys(user_id: int | None, username: str | None) -> list[str]:
+    keys: list[str] = []
+    if user_id is not None:
+        keys.append(str(user_id))
+    if username:
+        keys.append(f"@{username.lower().lstrip('@')}")
+    return keys
+
+
+def _ignored_list(chat_id: int) -> list[str]:
+    ignored = _chat_entry(chat_id).get("ignored")
+    if not isinstance(ignored, list):
+        return []
+    return [str(item) for item in ignored]
+
+
+def is_user_ignored(
+    chat_id: int,
+    user_id: int | None,
+    username: str | None,
+) -> bool:
+    ignored = set(_ignored_list(chat_id))
+    if not ignored:
+        return False
+    return any(key in ignored for key in _ignored_keys(user_id, username))
+
+
+def list_ignored_users(chat_id: int) -> list[str]:
+    return sorted(_ignored_list(chat_id))
+
+
+def add_ignored_user(
+    chat_id: int,
+    user_id: int | None,
+    username: str | None,
+) -> str:
+    key = _user_storage_key(user_id, username)
+    if key is None:
+        raise ValueError("user")
+
+    chats = _load_chats()
+    entry = chats.setdefault(str(chat_id), {})
+    ignored = entry.setdefault("ignored", [])
+    if not isinstance(ignored, list):
+        ignored = []
+        entry["ignored"] = ignored
+    if key not in ignored:
+        ignored.append(key)
+    _save_chats(chats)
+    return key
+
+
+def remove_ignored_user(
+    chat_id: int,
+    user_id: int | None,
+    username: str | None,
+) -> bool:
+    keys = _ignored_keys(user_id, username)
+    chats = _load_chats()
+    entry = chats.get(str(chat_id))
+    if not entry:
+        return False
+
+    ignored = entry.get("ignored")
+    if not isinstance(ignored, list):
+        return False
+
+    removed = False
+    for key in keys:
+        while key in ignored:
+            ignored.remove(key)
+            removed = True
+
+    if not ignored:
+        entry.pop("ignored", None)
+    if entry:
+        chats[str(chat_id)] = entry
+    else:
+        chats.pop(str(chat_id), None)
+    _save_chats(chats)
+    return removed

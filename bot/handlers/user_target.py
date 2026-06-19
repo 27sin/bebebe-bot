@@ -19,6 +19,10 @@ def _user_label(user: User) -> str:
     return name or str(user.id)
 
 
+def user_label(user: User) -> str:
+    return _user_label(user)
+
+
 def resolve_target_user(message: Message, mention_text: str | None = None) -> TargetUser | None:
     if mention_text and message.entities and message.text:
         for entity in message.entities:

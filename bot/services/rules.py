@@ -45,6 +45,10 @@ def _last_word(text: str) -> str | None:
     return words[-1]
 
 
+def extract_words(text: str) -> list[str]:
+    return WORD_PATTERN.findall(text)
+
+
 def _is_vowel(char: str) -> bool:
     return char.lower() in VOWELS
 
@@ -258,6 +262,20 @@ def _special_last_word_reply(text: str) -> str | None:
     return None
 
 
+def is_special_reply(text: str) -> bool:
+    return _special_last_word_reply(text) is not None
+
+
+def _parody_two_words(words: list[str]) -> str | None:
+    first = parody_word(words[0])
+    second = parody_word(words[1])
+    if not first or not second:
+        return None
+    if first.lower() == words[0].lower() and second.lower() == words[1].lower():
+        return None
+    return f"{first} {second}"
+
+
 def parody_with_rules(text: str) -> str | None:
     special = _special_last_word_reply(text)
     if special:
@@ -266,6 +284,12 @@ def parody_with_rules(text: str) -> str | None:
     hyphen_parody = _parody_hyphen_to(text)
     if hyphen_parody:
         return hyphen_parody
+
+    words = extract_words(text)
+    if len(words) == 2:
+        two_word = _parody_two_words(words)
+        if two_word:
+            return two_word
 
     last = _last_word(text)
     if not last:

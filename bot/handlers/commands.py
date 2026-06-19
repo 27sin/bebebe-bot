@@ -8,20 +8,24 @@ from aiogram.types import Message
 
 from bot.config import DEFAULT_REPLY_COOLDOWN_SECONDS, RANDOM_REPLY_PROBABILITY
 from bot.handlers.help_text import build_help_text
-from bot.handlers.user_target import resolve_target_user
+from bot.handlers.user_target import TargetUser, resolve_target_user
 from bot.services.settings import (
     RESET_ALIASES,
+    add_ignored_user,
     clear_reply_cooldown,
     clear_reply_probability,
     clear_user_reply_probability,
     get_effective_reply_probability,
     get_reply_cooldown,
     get_reply_probability,
+    list_ignored_users,
     list_user_reply_probabilities,
+    remove_ignored_user,
     set_reply_cooldown,
     set_reply_probability,
     set_user_reply_probability,
 )
+from bot.services.stats import build_stats_message, stats_period_help
 
 logger = logging.getLogger(__name__)
 
@@ -32,6 +36,9 @@ COOLDOWN_PATTERN = re.compile(r"^/cooldown(?:@\w+)?(?:\s+(.+))?$", re.IGNORECASE
 USER_CHANCE_PATTERN = re.compile(r"^/userchance(?:@\w+)?(?:\s+(.+))?$", re.IGNORECASE)
 HELP_PATTERN = re.compile(r"^/help(?:@\w+)?$", re.IGNORECASE)
 START_PATTERN = re.compile(r"^/start(?:@\w+)?$", re.IGNORECASE)
+IGNORE_PATTERN = re.compile(r"^/ignore(?:@\w+)?(?:\s+(.+))?$", re.IGNORECASE)
+UNIGNORE_PATTERN = re.compile(r"^/unignore(?:@\w+)?(?:\s+(.+))?$", re.IGNORECASE)
+STATS_PATTERN = re.compile(r"^/stats(?:@\w+)?(?:\s+(\S+))?$", re.IGNORECASE)
 MENTION_PATTERN = re.compile(r"@([A-Za-z0-9_]{4,})")
 
 
@@ -269,3 +276,89 @@ async def handle_user_chance(message: Message) -> None:
     await message.answer(
         f"Готово. Шанс для {target.label}: {_format_percent(probability)}."
     )
+
+
+def _resolve_ignore_target(message: Message, arg: str | None) -> TargetUser | None:
+    mention_match = MENTION_PATTERN.search(arg or "")
+    mention_text = f"@{mention_match.group(1)}" if mention_match else None
+    return resolve_target_user(message, mention_text)
+
+
+@router.message(F.text.regexp(IGNORE_PATTERN))
+async def handle_ignore(message: Message) -> None:
+    if not message.text or not message.from_user:
+        return
+
+    match = IGNORE_PATTERN.match(message.text.strip())
+    if not match:
+        return
+
+    chat_id = message.chat.id
+    arg = match.group(1)
+
+    if not arg:
+        ignored = list_ignored_users(chat_id)
+        if not ignored:
+            await message.answer(
+                "Игнор-лист пуст.\n"
+                "Добавить: /ignore @ник или reply на сообщение + /ignore"
+            )
+            return
+        lines = [_format_user_key(key) for key in ignored]
+        await message.answer("Бот не трогает:\n" + "\n".join(lines))
+        return
+
+    target = _resolve_ignore_target(message, arg)
+    if target is None:
+        await message.answer("Укажите участника через @ник или reply на его сообщение.")
+        return
+
+    add_ignored_user(chat_id, target.user_id, target.username)
+    await message.answer(f"Готово. Бот не будет отвечать {target.label}.")
+
+
+@router.message(F.text.regexp(UNIGNORE_PATTERN))
+async def handle_unignore(message: Message) -> None:
+    if not message.text or not message.from_user:
+        return
+
+    match = UNIGNORE_PATTERN.match(message.text.strip())
+    if not match:
+        return
+
+    chat_id = message.chat.id
+    arg = match.group(1)
+
+    if not arg:
+        await message.answer(
+            "Снять игнор: /unignore @ник или reply на сообщение + /unignore"
+        )
+        return
+
+    target = _resolve_ignore_target(message, arg)
+    if target is None:
+        await message.answer("Укажите участника через @ник или reply на его сообщение.")
+        return
+
+    if remove_ignored_user(chat_id, target.user_id, target.username):
+        await message.answer(f"Готово. {target.label} снова в игре.")
+    else:
+        await message.answer(f"{target.label} не был в игнор-листе.")
+
+
+@router.message(F.text.regexp(STATS_PATTERN))
+async def handle_stats(message: Message) -> None:
+    if not message.text:
+        return
+
+    match = STATS_PATTERN.match(message.text.strip())
+    if not match:
+        return
+
+    arg = (match.group(1) or "").strip().lower()
+    if arg in {"", "help", "?"}:
+        await message.answer(stats_period_help())
+        return
+
+    period = arg or "week"
+    await message.answer(build_stats_message(message.chat.id, period))

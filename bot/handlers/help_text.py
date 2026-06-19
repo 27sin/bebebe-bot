@@ -7,9 +7,8 @@ def build_help_text(chat_id: int) -> str:
     cooldown = get_reply_cooldown(chat_id)
 
     return (
-        "Бот передразнивает последнее слово в сообщении.\n"
-        "На вложения отвечает фиксированными фразами "
-        "(картинка, видео, гиф, стикер, голос, документ, гео).\n"
+        "Бот передразнивает слова в сообщении.\n"
+        "Ровно два слова — оба; одно или три и больше — последнее.\n"
         "Отвечает на reply, @упоминание или случайно.\n\n"
         f"Сейчас в чате: шанс {chance * 100:.0f}%, пауза {cooldown:g} сек.\n\n"
         "Команды:\n"
@@ -27,6 +26,11 @@ def build_help_text(chat_id: int) -> str:
         "/cooldown 0 — без ограничения\n"
         "/cooldown reset — сброс (по умолчанию "
         f"{DEFAULT_REPLY_COOLDOWN_SECONDS:g} сек)\n\n"
+        "/ignore — кого бот не трогает\n"
+        "/ignore @ник — добавить в игнор\n"
+        "/unignore @ник — убрать из игнора\n\n"
+        "/stats — статистика за 7 дней\n"
+        "/stats day|week|month|all — за другой период\n\n"
         f"Значения по умолчанию бота: шанс {RANDOM_REPLY_PROBABILITY * 100:.0f}%, "
         f"пауза {DEFAULT_REPLY_COOLDOWN_SECONDS:g} сек."
     )
