@@ -114,3 +114,49 @@ sudo systemctl restart telegram-parody-bot
 sudo systemctl stop telegram-parody-bot
 journalctl -u telegram-parody-bot -f
 ```
+
+## 8. Логи: сохранение и скачивание
+
+Бот пишет логи в файл **`/opt/telegram-parody-bot/logs/bot.log`** (ротация: до 5 файлов по 5 MB).  
+Параллельно остаётся вывод в systemd (`journalctl`).
+
+**На сервере:**
+
+```bash
+tail -f /opt/telegram-parody-bot/logs/bot.log
+ls -la /opt/telegram-parody-bot/logs/
+bash /opt/telegram-parody-bot/scripts/export-logs.sh
+# путь к архиву выведется в /tmp/bebebe-bot-logs-*.tar.gz
+```
+
+**Скачать на Windows (PowerShell, из папки проекта):**
+
+```powershell
+.\scripts\download-logs.ps1
+# другой ключ: .\scripts\download-logs.ps1 -Key "D:\path\to\id_rsa"
+```
+
+Файлы попадут в `downloaded-logs\YYYYMMDD-HHMMSS\`.
+
+**Скачать архив с сервера вручную:**
+
+```powershell
+scp -i D:\VibeCode\SSH\bebebe-bot\id_rsa iziashnyi@85.208.86.166:/tmp/bebebe-bot-logs-*.tar.gz .
+```
+
+После первого деплоя с этой функцией создайте каталог логов на сервере (если его ещё нет):
+
+```bash
+mkdir -p /opt/telegram-parody-bot/logs
+sudo chown iziashnyi:iziashnyi /opt/telegram-parody-bot/logs
+sudo systemctl restart telegram-parody-bot
+```
+
+## 9. Бот не отвечает на cloud.ru
+
+Если в логах `Request timeout error` — DNS отдаёт заблокированный IP Telegram.
+
+```bash
+echo "149.154.167.220 api.telegram.org" | sudo tee -a /etc/hosts
+sudo systemctl restart telegram-parody-bot
+```

@@ -31,8 +31,8 @@ if [[ ! -f "$APP_DIR/.env" ]]; then
   echo "Created $APP_DIR/.env — edit it and add BOT_TOKEN before starting the bot."
 fi
 
-mkdir -p "$APP_DIR/data"
-chown "$SERVICE_USER:$SERVICE_USER" "$APP_DIR/data"
+mkdir -p "$APP_DIR/data" "$APP_DIR/logs"
+chown "$SERVICE_USER:$SERVICE_USER" "$APP_DIR/data" "$APP_DIR/logs"
 
 cat > /etc/systemd/system/telegram-parody-bot.service <<EOF
 [Unit]
@@ -60,6 +60,11 @@ cat > /etc/sudoers.d/telegram-parody-bot-deploy <<EOF
 $SERVICE_USER ALL=(ALL) NOPASSWD: /bin/systemctl restart telegram-parody-bot, /bin/systemctl is-active telegram-parody-bot
 EOF
 chmod 440 /etc/sudoers.d/telegram-parody-bot-deploy
+
+# cloud.ru / RU networks may resolve api.telegram.org to blocked IPs.
+if ! grep -q "api.telegram.org" /etc/hosts; then
+  echo "149.154.167.220 api.telegram.org" >> /etc/hosts
+fi
 
 echo "Setup complete."
 echo "Next steps:"
