@@ -13,7 +13,7 @@ from aiogram import Bot
 from bot.config import PROJECT_ROOT
 from bot.services.rules import WORD_PATTERN, parody_word
 
-GAME_WORDS_PATH = PROJECT_ROOT / "bot" / "data" / "game_words.json"
+GAME_WORDS_PATH = PROJECT_ROOT / "rules" / "game_words.json"
 LEADERBOARD_PATH = PROJECT_ROOT / "data" / "guess_leaderboard.json"
 
 DEFAULT_ROUNDS = 3
