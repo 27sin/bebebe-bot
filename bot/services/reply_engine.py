@@ -40,14 +40,14 @@ async def build_text_reply(message: Message) -> BuiltReply | None:
         if reply:
             return BuiltReply(reply, "streak", _trigger_words(text))
 
-    base = parody_with_rules(text)
+    base = parody_with_rules(text, message.chat.id)
     source = "text"
     if not base:
         base = await parody_with_llm(text)
         if base:
             source = "text"
 
-    if base and not is_special_reply(text):
+    if base and not is_special_reply(text, message.chat.id):
         rare = maybe_rare_reply()
         if rare:
             base = rare

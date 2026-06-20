@@ -12,15 +12,18 @@ from bot.handlers.user_target import TargetUser, resolve_target_user
 from bot.services.settings import (
     RESET_ALIASES,
     add_ignored_user,
+    clear_custom_rule,
     clear_reply_cooldown,
     clear_reply_probability,
     clear_user_reply_probability,
     get_effective_reply_probability,
     get_reply_cooldown,
     get_reply_probability,
+    list_custom_rules,
     list_ignored_users,
     list_user_reply_probabilities,
     remove_ignored_user,
+    set_custom_rule,
     set_reply_cooldown,
     set_reply_probability,
     set_user_reply_probability,
@@ -39,7 +42,10 @@ START_PATTERN = re.compile(r"^/start(?:@\w+)?$", re.IGNORECASE)
 IGNORE_PATTERN = re.compile(r"^/ignore(?:@\w+)?(?:\s+(.+))?$", re.IGNORECASE)
 UNIGNORE_PATTERN = re.compile(r"^/unignore(?:@\w+)?(?:\s+(.+))?$", re.IGNORECASE)
 STATS_PATTERN = re.compile(r"^/stats(?:@\w+)?(?:\s+(\S+))?$", re.IGNORECASE)
+ADDRULE_PATTERN = re.compile(r"^/addrule(?:@\w+)?(?:\s+(.+))?$", re.IGNORECASE)
+TRIGGER_WORD_PATTERN = re.compile(r"^[A-Za-zА-Яа-яЁё0-9]+$")
 MENTION_PATTERN = re.compile(r"@([A-Za-z0-9_]{4,})")
+MAX_CUSTOM_RULE_LENGTH = 500
 
 
 def _parse_probability(raw: str) -> float:
@@ -94,6 +100,34 @@ def _parse_user_chance_args(message: Message, arg: str) -> tuple[str, str | None
     if not mention_text and len(tokens) == 1 and message.reply_to_message:
         return tokens[0].lower(), None
     raise ValueError("format")
+
+
+def _parse_addrule_args(raw: str) -> tuple[str, str]:
+    stripped = raw.strip()
+    for separator in ("→", "—", "->", "|"):
+        if separator in stripped:
+            left, right = stripped.split(separator, 1)
+            trigger, response = left.strip(), right.strip()
+            if trigger and response:
+                return trigger, response
+            raise ValueError("format")
+
+    parts = stripped.split(None, 1)
+    if len(parts) < 2:
+        raise ValueError("format")
+    return parts[0], parts[1].strip()
+
+
+def _validate_rule_trigger(trigger: str) -> None:
+    if not TRIGGER_WORD_PATTERN.fullmatch(trigger):
+        raise ValueError("trigger")
+
+
+def _validate_rule_response(response: str) -> None:
+    if not response.strip():
+        raise ValueError("response")
+    if len(response) > MAX_CUSTOM_RULE_LENGTH:
+        raise ValueError("length")
 
 
 @router.message(F.text.regexp(START_PATTERN))
@@ -362,3 +396,79 @@ async def handle_stats(message: Message) -> None:
 
     period = arg or "week"
     await message.answer(build_stats_message(message.chat.id, period))
+
+
+@router.message(F.text.regexp(ADDRULE_PATTERN))
+async def handle_addrule(message: Message) -> None:
+    if not message.text or not message.from_user:
+        return
+
+    match = ADDRULE_PATTERN.match(message.text.strip())
+    if not match:
+        return
+
+    chat_id = message.chat.id
+    arg = match.group(1)
+
+    if not arg:
+        rules = list_custom_rules(chat_id)
+        if not rules:
+            await message.answer(
+                "Своих правил пока нет.\n"
+                "Примеры:\n"
+                "/addrule пиво — пивасик\n"
+                "/addrule пиво пивасик\n"
+                "/addrule пиво reset — удалить правило"
+            )
+            return
+        lines = [f"• {trigger} → {response}" for trigger, response in rules]
+        await message.answer(
+            "Правила чата (последнее слово → ответ):\n" + "\n".join(lines)
+        )
+        return
+
+    parts = arg.strip().split(None, 1)
+    trigger = parts[0]
+    rest = parts[1].strip() if len(parts) > 1 else ""
+
+    if not rest or rest.lower() in RESET_ALIASES:
+        try:
+            _validate_rule_trigger(trigger)
+        except ValueError:
+            await message.answer("Триггер — одно слово: буквы, цифры, без пробелов.")
+            return
+        if clear_custom_rule(chat_id, trigger):
+            await message.answer(f"Правило для «{trigger.lower()}» удалено.")
+        else:
+            await message.answer(f"Правила для «{trigger.lower()}» не было.")
+        return
+
+    try:
+        parsed_trigger, response = _parse_addrule_args(arg)
+        _validate_rule_trigger(parsed_trigger)
+        _validate_rule_response(response)
+    except ValueError as error:
+        if str(error) == "length":
+            await message.answer(f"Ответ не длиннее {MAX_CUSTOM_RULE_LENGTH} символов.")
+        elif str(error) == "trigger":
+            await message.answer("Триггер — одно слово: буквы, цифры, без пробелов.")
+        else:
+            await message.answer(
+                "Примеры:\n"
+                "/addrule пиво — пивасик\n"
+                "/addrule пиво пивасик\n"
+                "/addrule пиво reset"
+            )
+        return
+
+    set_custom_rule(chat_id, parsed_trigger, response)
+    logger.info(
+        "Chat %s custom rule %r -> %r by %s",
+        chat_id,
+        parsed_trigger.lower(),
+        response,
+        message.from_user.id,
+    )
+    await message.answer(
+        f"Готово. Если последнее слово «{parsed_trigger.lower()}» — отвечу: {response}"
+    )

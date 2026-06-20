@@ -25,6 +25,10 @@ def _normalize_entry(entry: Any) -> dict[str, Any]:
         result["users"] = {str(key): float(value) for key, value in entry["users"].items()}
     if isinstance(entry.get("ignored"), list):
         result["ignored"] = [str(item) for item in entry["ignored"]]
+    if isinstance(entry.get("custom_rules"), dict):
+        result["custom_rules"] = {
+            str(key).lower(): str(value) for key, value in entry["custom_rules"].items()
+        }
     return result
 
 
@@ -289,3 +293,52 @@ def remove_ignored_user(
         chats.pop(str(chat_id), None)
     _save_chats(chats)
     return removed
+
+
+def _custom_rules_map(chat_id: int) -> dict[str, str]:
+    rules = _chat_entry(chat_id).get("custom_rules")
+    if not isinstance(rules, dict):
+        return {}
+    return {str(key).lower(): str(value) for key, value in rules.items()}
+
+
+def list_custom_rules(chat_id: int) -> list[tuple[str, str]]:
+    return sorted(_custom_rules_map(chat_id).items(), key=lambda item: item[0])
+
+
+def get_custom_rule(chat_id: int, trigger: str) -> str | None:
+    return _custom_rules_map(chat_id).get(trigger.lower())
+
+
+def set_custom_rule(chat_id: int, trigger: str, response: str) -> None:
+    key = trigger.lower()
+    chats = _load_chats()
+    entry = chats.setdefault(str(chat_id), {})
+    rules = entry.setdefault("custom_rules", {})
+    if not isinstance(rules, dict):
+        rules = {}
+        entry["custom_rules"] = rules
+    rules[key] = response
+    _save_chats(chats)
+
+
+def clear_custom_rule(chat_id: int, trigger: str) -> bool:
+    key = trigger.lower()
+    chats = _load_chats()
+    entry = chats.get(str(chat_id))
+    if not entry:
+        return False
+
+    rules = entry.get("custom_rules")
+    if not isinstance(rules, dict) or key not in rules:
+        return False
+
+    del rules[key]
+    if not rules:
+        entry.pop("custom_rules", None)
+    if entry:
+        chats[str(chat_id)] = entry
+    else:
+        chats.pop(str(chat_id), None)
+    _save_chats(chats)
+    return True

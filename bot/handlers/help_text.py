@@ -31,6 +31,9 @@ def build_help_text(chat_id: int) -> str:
         "/unignore @ник — убрать из игнора\n\n"
         "/stats — статистика за 7 дней\n"
         "/stats day|week|month|all — за другой период\n\n"
+        "/addrule — свои ответы на последнее слово\n"
+        "/addrule слово — ответ\n"
+        "/addrule слово reset — удалить правило\n\n"
         f"Значения по умолчанию бота: шанс {RANDOM_REPLY_PROBABILITY * 100:.0f}%, "
         f"пауза {DEFAULT_REPLY_COOLDOWN_SECONDS:g} сек."
     )

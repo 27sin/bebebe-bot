@@ -2,6 +2,8 @@ from __future__ import annotations
 
 import re
 
+from bot.services.settings import get_custom_rule
+
 WORD_PATTERN = re.compile(r"[A-Za-zА-Яа-яЁё0-9]+")
 HYPHEN_TO_PATTERN = re.compile(
     r"([A-Za-zА-Яа-яЁё0-9]+)[-—](то)\b",
@@ -268,7 +270,7 @@ def parody_word(word: str) -> str:
     return _join_parody(prefix, suffix)
 
 
-def _fixed_last_word_reply(text: str) -> str | None:
+def _fixed_last_word_reply(text: str, chat_id: int | None = None) -> str | None:
     last = _last_word(text)
     if not last:
         return None
@@ -276,14 +278,18 @@ def _fixed_last_word_reply(text: str) -> str | None:
     for names, reply in _NAME_REPLIES:
         if normalized in names:
             return reply
+    if chat_id is not None:
+        custom = get_custom_rule(chat_id, normalized)
+        if custom:
+            return custom
     for words, reply in _STOP_WORD_REPLIES:
         if normalized in words:
             return reply
     return None
 
 
-def is_special_reply(text: str) -> bool:
-    return _fixed_last_word_reply(text) is not None
+def is_special_reply(text: str, chat_id: int | None = None) -> bool:
+    return _fixed_last_word_reply(text, chat_id) is not None
 
 
 def _parody_two_words(words: list[str]) -> str | None:
@@ -296,8 +302,8 @@ def _parody_two_words(words: list[str]) -> str | None:
     return f"{first} {second}"
 
 
-def parody_with_rules(text: str) -> str | None:
-    special = _fixed_last_word_reply(text)
+def parody_with_rules(text: str, chat_id: int | None = None) -> str | None:
+    special = _fixed_last_word_reply(text, chat_id)
     if special:
         return special
 
