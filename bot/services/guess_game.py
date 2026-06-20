@@ -19,6 +19,7 @@ from bot.services.game_stats import (
     record_session_start,
 )
 from bot.services.rules import WORD_PATTERN, parody_word
+from bot.services.titles import format_titled_label
 
 GAME_WORDS_PATH = PROJECT_ROOT / "rules" / "game_words.json"
 LEADERBOARD_PATH = PROJECT_ROOT / "data" / "guess_leaderboard.json"
@@ -55,6 +56,7 @@ class GameSession:
     started_by: int = 0
     starter_label: str = ""
     participants: frozenset[int] | None = None
+    game_mode: str = "solo"
     extra_round: bool = False
     tiebreaker_for: frozenset[int] | None = None
     rounds_started: int = 0
@@ -75,6 +77,16 @@ def is_game_active(chat_id: int) -> bool:
 
 
 def is_party_game_active(chat_id: int) -> bool:
+    session = _sessions.get(chat_id)
+    return session is not None and session.game_mode == "party"
+
+
+def is_duel_game_active(chat_id: int) -> bool:
+    session = _sessions.get(chat_id)
+    return session is not None and session.game_mode == "duel"
+
+
+def is_restricted_game_active(chat_id: int) -> bool:
     session = _sessions.get(chat_id)
     return session is not None and session.participants is not None
 
@@ -153,18 +165,33 @@ async def _send(chat_id: int, text: str) -> None:
         logger.exception("Failed to send guess message chat=%s", chat_id)
 
 
+def _display_label(session: GameSession, user_id: int) -> str:
+    base = session.round_labels.get(user_id, str(user_id))
+    return format_titled_label(session.chat_id, user_id, base, context="game")
+
+
 def _session_scoreboard(session: GameSession) -> str:
     if not session.round_scores:
         return "  —"
     ranked = sorted(session.round_scores.items(), key=lambda item: (-item[1], item[0]))
     lines = []
     for index, (user_id, wins) in enumerate(ranked, start=1):
-        label = session.round_labels.get(user_id, str(user_id))
-        lines.append(f"  {index}. {label} — {wins}")
+        lines.append(f"  {index}. {_display_label(session, user_id)} — {wins}")
     return "\n".join(lines)
 
 
 def _session_winners(session: GameSession) -> list[tuple[int, str]]:
+    if not session.round_scores:
+        return []
+    best = max(session.round_scores.values())
+    return [
+        (user_id, _display_label(session, user_id))
+        for user_id, score in session.round_scores.items()
+        if score == best
+    ]
+
+
+def _session_winners_base(session: GameSession) -> list[tuple[int, str]]:
     if not session.round_scores:
         return []
     best = max(session.round_scores.values())
@@ -214,9 +241,13 @@ def build_leaderboard_message(chat_id: int) -> str:
         key=lambda item: (-int(item[1].get("wins", 0)), item[1].get("label", item[0])),
     )
     lines = []
-    for index, (_, entry) in enumerate(ranked[:LEADERBOARD_LIMIT], start=1):
-        label = str(entry.get("label", "?"))
+    for index, (user_id_str, entry) in enumerate(ranked[:LEADERBOARD_LIMIT], start=1):
+        base = str(entry.get("label", "?"))
         wins = int(entry.get("wins", 0))
+        if user_id_str.isdigit():
+            label = format_titled_label(chat_id, int(user_id_str), base, context="game")
+        else:
+            label = base
         lines.append(f"  {index}. {label} — {wins}")
     return "🏆 Лидерборд «Угадай пародию»:\n" + "\n".join(lines)
 
@@ -250,7 +281,10 @@ async def _start_round(session: GameSession) -> str | None:
 def _build_finale_message(session: GameSession, header: str, outcome: str) -> str:
     lines = [header, "", "🏁 Игра окончена!", "", "Итог:", _session_scoreboard(session)]
     winners = _session_winners(session)
-    suffix = " (party)" if session.participants is not None else ""
+    mode_suffix = {
+        "party": " (party)",
+        "duel": " (дуэль)",
+    }.get(session.game_mode, "")
 
     if outcome == "silent":
         lines.extend(["", "Вы че ебанулись? Больше не буду с вами играть."])
@@ -270,7 +304,7 @@ def _build_finale_message(session: GameSession, header: str, outcome: str) -> st
         lines.extend(
             [
                 "",
-                f"🏆 Победитель{suffix}: {name}",
+                f"🏆 Победитель{mode_suffix}: {name}",
                 f"🎉 Поздравляю, {name}! Ты победил в «Угадай пародию»!",
                 "+1 в лидерборд",
             ]
@@ -282,7 +316,7 @@ def _build_finale_message(session: GameSession, header: str, outcome: str) -> st
         lines.extend(
             [
                 "",
-                f"🤝 Ничья{suffix}: {names}",
+                f"🤝 Ничья{mode_suffix}: {names}",
                 "После дополнительного раунда победителя нет — делите победу.",
                 "+1 в лидерборд каждому",
             ]
@@ -301,17 +335,18 @@ async def _finish_session(chat_id: int, header: str, *, outcome: str) -> None:
         return
 
     winners = _session_winners(session)
-    mode = "party" if session.participants is not None else "solo"
+    winners_base = _session_winners_base(session)
+    mode = session.game_mode
     record_session_end(
         chat_id,
         mode=mode,
         outcome=outcome,
         rounds_played=session.rounds_started,
-        winners=winners if outcome in {"winner", "tie_after_breaker", "stopped"} else None,
+        winners=winners_base if outcome in {"winner", "tie_after_breaker", "stopped"} else None,
     )
 
-    if outcome in {"winner", "tie_after_breaker"} and winners:
-        record_leaderboard_wins(chat_id, winners)
+    if outcome in {"winner", "tie_after_breaker"} and winners_base:
+        record_leaderboard_wins(chat_id, winners_base)
 
     await _send(chat_id, _build_finale_message(session, header, outcome))
 
@@ -463,9 +498,14 @@ async def start_session(
     starter_label: str,
     *,
     participants: frozenset[int] | None = None,
+    game_mode: str = "solo",
 ) -> str:
     if is_game_active(chat_id):
-        stop_cmd = "/guessparty stop" if participants is not None else "/guess stop"
+        stop_cmds = {
+            "party": "/guessparty stop",
+            "duel": "/guessduel stop",
+        }
+        stop_cmd = stop_cmds.get(game_mode, "/guess stop")
         return f"Игра уже идёт. Дождись конца или {stop_cmd}"
 
     rounds = max(MIN_ROUNDS, min(MAX_ROUNDS, rounds))
@@ -480,6 +520,7 @@ async def start_session(
         started_by=starter_id,
         starter_label=starter_label,
         participants=participants,
+        game_mode=game_mode,
     )
     _sessions[chat_id] = session
 
@@ -489,7 +530,7 @@ async def start_session(
         _cancel_timeout(chat_id)
         return "Не получилось подобрать загадку. Попробуй ещё раз."
 
-    mode = "party" if participants is not None else "solo"
+    mode = game_mode
     record_session_start(
         chat_id,
         starter_id,
@@ -498,6 +539,9 @@ async def start_session(
         rounds=rounds,
         party_size=len(participants) if participants is not None else None,
     )
+
+    if game_mode == "duel":
+        return round_text
 
     if participants is not None:
         return (
@@ -522,6 +566,8 @@ async def stop_session(chat_id: int) -> str | None:
         header = (
             "🛑 Party-игра остановлена."
             if is_party_game_active(chat_id)
+            else "🛑 Дуэль остановлена."
+            if is_duel_game_active(chat_id)
             else "🛑 Игра остановлена."
         )
         await _finish_session(chat_id, header, outcome="stopped")
@@ -559,8 +605,9 @@ async def try_guess(chat_id: int, user_id: int, label: str, text: str) -> bool:
     session.round_labels[user_id] = label
     record_correct_guess(chat_id, user_id, label)
 
+    display = _display_label(session, user_id)
     header = (
-        f"✅ {label} угадал!\n"
+        f"✅ {display} угадал!\n"
         f"Раунд {session.current_round}/{session.total_rounds} — было: {session.answer}"
     )
     await _advance_or_finish(chat_id, header)
@@ -574,6 +621,9 @@ def game_help_text() -> str:
         "/guess 5 — сессия из 5 раундов\n"
         "/guess stop — остановить игру\n"
         "/guess score — лидерборд\n\n"
+        "/guessduel @ник — дуэль 1 на 1\n"
+        "/guessduel accept — принять вызов\n\n"
+        "/titles — титулы за ответы и победы\n\n"
         "Party:\n"
         "/guessparty — лобби с подтверждением\n"
         "/guessparty join|leave|stop\n\n"

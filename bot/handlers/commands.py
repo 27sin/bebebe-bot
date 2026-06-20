@@ -8,7 +8,7 @@ from aiogram.types import Message
 
 from bot.config import DEFAULT_REPLY_COOLDOWN_SECONDS, RANDOM_REPLY_PROBABILITY
 from bot.handlers.help_text import build_help_text
-from bot.handlers.user_target import TargetUser, resolve_target_user
+from bot.handlers.user_target import TargetUser, resolve_target_user, user_label
 from bot.services.settings import (
     RESET_ALIASES,
     add_ignored_user,
@@ -30,6 +30,7 @@ from bot.services.settings import (
 )
 from bot.services.stats import build_stats_message, stats_period_help
 from bot.services.game_stats import build_game_stats_message, game_stats_period_help
+from bot.services.titles import build_titles_message
 
 logger = logging.getLogger(__name__)
 
@@ -44,6 +45,7 @@ IGNORE_PATTERN = re.compile(r"^/ignore(?:@\w+)?(?:\s+(.+))?$", re.IGNORECASE)
 UNIGNORE_PATTERN = re.compile(r"^/unignore(?:@\w+)?(?:\s+(.+))?$", re.IGNORECASE)
 STATS_PATTERN = re.compile(r"^/stats(?:@\w+)?(?:\s+(\S+))?$", re.IGNORECASE)
 GAMESTATS_PATTERN = re.compile(r"^/gamestats(?:@\w+)?(?:\s+(\S+))?$", re.IGNORECASE)
+TITLES_PATTERN = re.compile(r"^/titles(?:@\w+)?(?:\s*(.*))?$", re.IGNORECASE)
 ADDRULE_PATTERN = re.compile(r"^/addrule(?:@\w+)?(?:\s+(.+))?$", re.IGNORECASE)
 TRIGGER_WORD_PATTERN = re.compile(r"^[A-Za-zА-Яа-яЁё0-9]+$")
 MENTION_PATTERN = re.compile(r"@([A-Za-z0-9_]{4,})")
@@ -416,6 +418,39 @@ async def handle_gamestats(message: Message) -> None:
 
     period = arg or "week"
     await message.answer(build_game_stats_message(message.chat.id, period))
+
+
+@router.message(F.text.regexp(TITLES_PATTERN))
+async def handle_titles(message: Message) -> None:
+    if not message.from_user:
+        return
+
+    match = TITLES_PATTERN.match((message.text or "").strip())
+    if not match:
+        return
+
+    raw_arg = (match.group(1) or "").strip()
+    target: TargetUser | None = None
+    for part in raw_arg.split():
+        if part.startswith("@"):
+            target = resolve_target_user(message, part)
+            break
+    if target is None and message.reply_to_message:
+        target = resolve_target_user(message, None)
+
+    if target is not None and target.user_id is not None:
+        await message.answer(
+            build_titles_message(message.chat.id, target.user_id, target.label)
+        )
+        return
+
+    await message.answer(
+        build_titles_message(
+            message.chat.id,
+            message.from_user.id,
+            user_label(message.from_user),
+        )
+    )
 
 
 @router.message(F.text.regexp(ADDRULE_PATTERN))

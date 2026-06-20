@@ -45,6 +45,12 @@ def is_party_mode_blocking(chat_id: int) -> bool:
     return is_party_lobby_active(chat_id) or is_party_game_active(chat_id)
 
 
+def is_party_or_duel_blocking(chat_id: int) -> bool:
+    from bot.services.guess_duel import is_duel_mode_blocking
+
+    return is_party_mode_blocking(chat_id) or is_duel_mode_blocking(chat_id)
+
+
 def _lobby_status(lobby: PartyLobby) -> str:
     joined = len(lobby.participants)
     lines = [f"Участники: {joined}/{lobby.required}"]
@@ -83,6 +89,7 @@ async def _launch_party_game(chat_id: int) -> None:
         starter_id=host_id,
         starter_label=host_label,
         participants=participant_ids,
+        game_mode="party",
     )
     await _send(chat_id, text)
 
@@ -129,8 +136,12 @@ def _parse_party_size(raw: str) -> int | None:
 
 
 async def begin_party_setup(chat_id: int, host_id: int, host_label: str) -> str:
+    from bot.services.guess_duel import is_duel_lobby_active
+
     if is_game_active(chat_id):
         return "Сейчас уже идёт игра. Дождись конца или /guessparty stop"
+    if is_duel_lobby_active(chat_id):
+        return "Сейчас открыта дуэль. /guessduel stop"
     if is_party_lobby_active(chat_id):
         return "Лобби уже открыто. Жди участников или /guessparty stop"
     if is_party_pending_setup(chat_id):
@@ -151,8 +162,12 @@ async def create_party_lobby(
     required: int,
     rounds: int = DEFAULT_ROUNDS,
 ) -> str:
+    from bot.services.guess_duel import is_duel_lobby_active
+
     if is_game_active(chat_id):
         return "Сейчас уже идёт игра. /guessparty stop"
+    if is_duel_lobby_active(chat_id):
+        return "Сейчас открыта дуэль. /guessduel stop"
     if is_party_lobby_active(chat_id):
         return "Лобби уже открыто."
 

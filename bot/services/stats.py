@@ -59,6 +59,9 @@ def record_reply(
     source: str,
     trigger_words: list[str] | tuple[str, ...] | None = None,
 ) -> None:
+    from bot.services.titles import increment_reply_count
+
+    increment_reply_count(chat_id, user_id)
     chats = _load_records()
     entries = chats.setdefault(str(chat_id), [])
     entries.append(
@@ -73,6 +76,14 @@ def record_reply(
     if len(entries) > 5000:
         chats[str(chat_id)] = entries[-5000:]
     _save_records(chats)
+
+
+def count_user_replies_all_time(chat_id: int, user_id: int) -> int:
+    return sum(
+        1
+        for entry in _load_records().get(str(chat_id), [])
+        if int(entry.get("user_id", 0)) == user_id
+    )
 
 
 def _filter_records(

@@ -9,9 +9,10 @@ from aiogram.types import Message
 
 from bot.handlers.user_target import user_label
 from bot.handlers.guess_commands import handle_guess_attempt
+from bot.handlers.guess_duel_commands import handle_duel_flow
 from bot.handlers.guess_party_commands import handle_party_flow
 from bot.services.attachments import parody_for_attachment
-from bot.services.guess_party import is_party_mode_blocking
+from bot.services.guess_party import is_party_or_duel_blocking
 from bot.services.guess_game import is_game_active
 from bot.services.edit_tracker import register_bot_reply, was_bot_reply_target
 from bot.services.rate_limit import can_reply_now, mark_replied
@@ -82,6 +83,9 @@ async def handle_group_message(message: Message) -> None:
     if not message.from_user or message.from_user.is_bot or not message.text:
         return
 
+    if await handle_duel_flow(message):
+        return
+
     if await handle_party_flow(message):
         return
 
@@ -108,7 +112,7 @@ async def handle_group_attachment(message: Message) -> None:
     if not message.from_user or message.from_user.is_bot:
         return
 
-    if is_party_mode_blocking(message.chat.id):
+    if is_party_or_duel_blocking(message.chat.id):
         return
 
     if is_game_active(message.chat.id):

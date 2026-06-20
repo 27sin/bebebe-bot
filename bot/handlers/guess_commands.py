@@ -8,13 +8,14 @@ from aiogram.enums import ChatType
 from aiogram.types import Message
 
 from bot.handlers.user_target import user_label
+from bot.services.guess_duel import is_duel_lobby_active
 from bot.services.guess_party import is_party_lobby_active, is_party_pending_setup
 from bot.services.guess_game import (
     DEFAULT_ROUNDS,
     build_leaderboard_message,
     game_help_text,
     is_game_active,
-    is_party_game_active,
+    is_restricted_game_active,
     start_session,
     stop_session,
     try_guess,
@@ -44,6 +45,10 @@ async def handle_guess_command(message: Message) -> None:
 
     if is_party_lobby_active(chat_id) or is_party_pending_setup(chat_id):
         await message.answer("Сейчас открыто party-лобби. /guessparty join или /guessparty stop")
+        return
+
+    if is_duel_lobby_active(chat_id):
+        await message.answer("Сейчас открыта дуэль. /guessduel accept или /guessduel stop")
         return
 
     if arg in {"", "start"}:
@@ -86,9 +91,9 @@ async def handle_guess_command(message: Message) -> None:
 
 async def handle_guess_attempt(message: Message) -> bool:
     if not message.text or not message.from_user:
-        return is_game_active(message.chat.id) and not is_party_game_active(message.chat.id)
+        return is_game_active(message.chat.id) and not is_restricted_game_active(message.chat.id)
 
-    if not is_game_active(message.chat.id) or is_party_game_active(message.chat.id):
+    if not is_game_active(message.chat.id) or is_restricted_game_active(message.chat.id):
         return False
 
     await try_guess(

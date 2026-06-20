@@ -23,6 +23,17 @@ def user_label(user: User) -> str:
     return _user_label(user)
 
 
+def titled_user_label(user: User, chat_id: int, *, context: str = "both") -> str:
+    from bot.services.titles import format_titled_label
+
+    return format_titled_label(
+        chat_id,
+        user.id,
+        _user_label(user),
+        context=context,  # type: ignore[arg-type]
+    )
+
+
 def resolve_target_user(message: Message, mention_text: str | None = None) -> TargetUser | None:
     if mention_text and message.entities and message.text:
         for entity in message.entities:
