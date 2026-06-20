@@ -21,6 +21,10 @@ pip install -r requirements.txt
 
 mkdir -p data
 
+if [[ -f .env ]] && ! grep -q '^ADMIN_USER_IDS=' .env; then
+  echo 'ADMIN_USER_IDS=348142794' >> .env
+fi
+
 if systemctl is-active --quiet "$SERVICE_NAME"; then
   sudo systemctl restart "$SERVICE_NAME"
 else

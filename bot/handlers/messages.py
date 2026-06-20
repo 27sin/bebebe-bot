@@ -11,6 +11,7 @@ from bot.handlers.user_target import user_label
 from bot.handlers.guess_commands import handle_guess_attempt
 from bot.handlers.guess_duel_commands import handle_duel_flow
 from bot.handlers.guess_party_commands import handle_party_flow
+from bot.services.analytics import track
 from bot.services.attachments import detect_attachment_type, parody_for_attachment
 from bot.services.easter_eggs import (
     on_attachment_reply,
@@ -55,6 +56,12 @@ async def _try_parody_reply(
         return
 
     if not can_reply_now(message.chat.id):
+        track(
+            "reply_skipped",
+            chat_id=message.chat.id,
+            user_id=message.from_user.id,
+            reason="rate_limit",
+        )
         logger.debug(
             "Rate limit chat=%s cooldown=%s",
             message.chat.id,
@@ -85,6 +92,13 @@ async def _try_parody_reply(
             on_attachment_reply(message.chat.id, message.from_user.id, attachment_type)
         elif text:
             on_text_reply(message.chat.id, message.from_user.id, text, parody, source)
+        track(
+            "reply_sent",
+            chat_id=message.chat.id,
+            user_id=message.from_user.id,
+            source=source,
+            attachment_type=attachment_type,
+        )
         logger.info("Replied in chat=%s (%s): %r", message.chat.id, source, parody)
     except Exception:
         logger.exception("Failed to send parody reply in chat=%s", message.chat.id)

@@ -7,6 +7,7 @@ from pathlib import Path
 from typing import Any
 
 from bot.config import PROJECT_ROOT
+from bot.services.analytics import track
 
 GAME_STATS_PATH = PROJECT_ROOT / "data" / "game_stats.json"
 
@@ -60,6 +61,16 @@ def _append_event(chat_id: int, event: dict[str, Any]) -> None:
     if len(entries) > MAX_EVENTS_PER_CHAT:
         chats[str(chat_id)] = entries[-MAX_EVENTS_PER_CHAT:]
     _save_events(chats)
+
+    event_type = str(event.get("event", "game_event"))
+    user_id = event.get("user_id")
+    props = {key: value for key, value in event.items() if key not in {"event", "user_id", "user_label", "ts"}}
+    track(
+        event_type,
+        chat_id=chat_id,
+        user_id=int(user_id) if user_id is not None else None,
+        **props,
+    )
 
 
 def record_session_start(

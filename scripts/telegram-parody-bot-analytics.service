@@ -1,0 +1,13 @@
+[Unit]
+Description=Weekly Telegram bot analytics report
+After=network-online.target
+
+[Service]
+Type=oneshot
+User=__SERVICE_USER__
+WorkingDirectory=/opt/telegram-parody-bot
+EnvironmentFile=/opt/telegram-parody-bot/.env
+ExecStart=/opt/telegram-parody-bot/.venv/bin/python scripts/send_weekly_analytics.py
+
+[Install]
+WantedBy=multi-user.target

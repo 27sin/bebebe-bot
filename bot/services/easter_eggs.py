@@ -6,6 +6,7 @@ from functools import lru_cache
 from typing import Any
 
 from bot.config import PROJECT_ROOT
+from bot.services.analytics import track
 
 REGISTRY_PATH = PROJECT_ROOT / "rules" / "easter_eggs.json"
 STATE_PATH = PROJECT_ROOT / "data" / "easter_eggs.json"
@@ -62,10 +63,16 @@ def _persist_user(chat_id: int, user_id: int, state: dict[str, Any]) -> None:
     _save_state(chats)
 
 
-def _unlock_in_state(state: dict[str, Any], egg_id: str) -> None:
+def _unlock_in_state(state: dict[str, Any], egg_id: str) -> bool:
     unlocked: list[str] = state.setdefault("unlocked", [])
-    if egg_id not in unlocked:
-        unlocked.append(egg_id)
+    if egg_id in unlocked:
+        return False
+    unlocked.append(egg_id)
+    return True
+
+
+def _track_unlock(chat_id: int, user_id: int, egg_id: str) -> None:
+    track("easter_egg_unlock", chat_id=chat_id, user_id=user_id, egg_id=egg_id)
 
 
 def stop_word_egg_id(text: str) -> str | None:
@@ -116,11 +123,12 @@ def on_text_reply(chat_id: int, user_id: int, text: str, reply: str, source: str
     state = _user_state(chat_id, user_id)
 
     if is_two_word_parody(text, reply):
-        _unlock_in_state(state, "parody_two_words")
+        if _unlock_in_state(state, "parody_two_words"):
+            _track_unlock(chat_id, user_id, "parody_two_words")
 
     stop_id = _registry_stop_word_trigger(text, chat_id)
-    if stop_id:
-        _unlock_in_state(state, stop_id)
+    if stop_id and _unlock_in_state(state, stop_id):
+        _track_unlock(chat_id, user_id, stop_id)
 
     _persist_user(chat_id, user_id, state)
 
@@ -135,15 +143,16 @@ def on_rare_reply(chat_id: int, user_id: int, rare_text: str) -> None:
     if rare_text not in seen:
         seen.append(rare_text)
 
-    _unlock_in_state(state, "rare_first")
+    if _unlock_in_state(state, "rare_first"):
+        _track_unlock(chat_id, user_id, "rare_first")
 
     required = 12
     for egg in _registry().get("eggs", []):
         if egg.get("id") == "rare_all":
             required = int(egg.get("requires", 12))
             break
-    if len(seen) >= required:
-        _unlock_in_state(state, "rare_all")
+    if len(seen) >= required and _unlock_in_state(state, "rare_all"):
+        _track_unlock(chat_id, user_id, "rare_all")
 
     _persist_user(chat_id, user_id, state)
 
@@ -168,8 +177,8 @@ def on_attachment_reply(chat_id: int, user_id: int, attachment_type: str) -> Non
         if egg.get("id") != "attach_all":
             continue
         required_types = list(egg.get("attachment_types", []))
-        if all(item in seen for item in required_types):
-            _unlock_in_state(state, "attach_all")
+        if all(item in seen for item in required_types) and _unlock_in_state(state, "attach_all"):
+            _track_unlock(chat_id, user_id, "attach_all")
         break
 
     _persist_user(chat_id, user_id, state)
@@ -177,7 +186,8 @@ def on_attachment_reply(chat_id: int, user_id: int, attachment_type: str) -> Non
 
 def on_edit_reaction(chat_id: int, user_id: int) -> None:
     state = _user_state(chat_id, user_id)
-    _unlock_in_state(state, "edit_reaction")
+    if _unlock_in_state(state, "edit_reaction"):
+        _track_unlock(chat_id, user_id, "edit_reaction")
     _persist_user(chat_id, user_id, state)
 
 
@@ -187,7 +197,8 @@ def on_game_first_win(chat_id: int, user_id: int) -> None:
     if get_win_count(chat_id, user_id) != 0:
         return
     state = _user_state(chat_id, user_id)
-    _unlock_in_state(state, "game_first_win")
+    if _unlock_in_state(state, "game_first_win"):
+        _track_unlock(chat_id, user_id, "game_first_win")
     _persist_user(chat_id, user_id, state)
 
 

@@ -106,6 +106,9 @@ bash deploy.sh
 
 - `.env` — токены (только на сервере)
 - `data/settings.json` — настройки чатов (`/chance`, `/cooldown`)
+- `data/analytics.db` — аналитика для владельца (`/adminstats`)
+
+Подробнее: [rules/ANALYTICS.md](rules/ANALYTICS.md)
 
 ## 7. Полезные команды
 

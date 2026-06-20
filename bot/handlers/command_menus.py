@@ -8,6 +8,7 @@ from aiogram.types import CallbackQuery, Message
 
 from bot.config import DEFAULT_REPLY_COOLDOWN_SECONDS, RANDOM_REPLY_PROBABILITY
 from bot.handlers.user_target import user_label
+from bot.services.analytics import track
 from bot.services.command_menus import (
     COMMAND_MENUS,
     build_menu_keyboard,
@@ -118,6 +119,12 @@ def _menu_extra(menu_id: str, chat_id: int) -> str:
 
 
 async def send_command_menu(message: Message, menu_id: str) -> None:
+    track(
+        "menu_shown",
+        chat_id=message.chat.id,
+        user_id=message.from_user.id if message.from_user else None,
+        menu_id=menu_id,
+    )
     text = build_menu_text(menu_id, extra=_menu_extra(menu_id, message.chat.id))
     if text is None:
         return
@@ -240,6 +247,14 @@ async def handle_command_menu_callback(callback: CallbackQuery) -> None:
     if menu_id not in COMMAND_MENUS:
         await callback.answer("Неизвестная команда.", show_alert=True)
         return
+
+    track(
+        "menu_action",
+        chat_id=callback.message.chat.id,
+        user_id=callback.from_user.id if callback.from_user else None,
+        menu_id=menu_id,
+        action=action,
+    )
 
     if callback.message.chat.type not in {ChatType.GROUP, ChatType.SUPERGROUP} and menu_id in {
         "guess",

@@ -28,6 +28,7 @@ from bot.services.settings import (
 )
 from bot.services.stats import build_stats_message
 from bot.services.game_stats import build_game_stats_message
+from bot.services.analytics import track
 from bot.services.profile import build_profile_message
 from bot.services.titles import build_titles_message
 
@@ -168,6 +169,7 @@ async def handle_chance(message: Message) -> None:
     try:
         if arg.strip().lower() in RESET_ALIASES:
             clear_reply_probability(chat_id)
+            track("setting_changed", chat_id=chat_id, user_id=message.from_user.id, setting="chance", action="reset")
             await message.answer(
                 f"Сброшено. Шанс: {_format_percent(get_reply_probability(chat_id))}."
             )
@@ -179,6 +181,14 @@ async def handle_chance(message: Message) -> None:
         return
 
     set_reply_probability(chat_id, probability)
+    track(
+        "setting_changed",
+        chat_id=chat_id,
+        user_id=message.from_user.id,
+        setting="chance",
+        action="set",
+        value=probability,
+    )
     logger.info("Chat %s chance set to %s by %s", chat_id, probability, message.from_user.id)
     await message.answer(f"Готово. Шанс случайного ответа: {_format_percent(probability)}.")
 
@@ -203,6 +213,7 @@ async def handle_cooldown(message: Message) -> None:
     try:
         if arg.strip().lower() in RESET_ALIASES:
             clear_reply_cooldown(chat_id)
+            track("setting_changed", chat_id=chat_id, user_id=message.from_user.id, setting="cooldown", action="reset")
             await message.answer(
                 f"Сброшено. Пауза: {_format_cooldown(get_reply_cooldown(chat_id))}."
             )
@@ -214,6 +225,14 @@ async def handle_cooldown(message: Message) -> None:
         return
 
     set_reply_cooldown(chat_id, cooldown)
+    track(
+        "setting_changed",
+        chat_id=chat_id,
+        user_id=message.from_user.id,
+        setting="cooldown",
+        action="set",
+        value=cooldown,
+    )
     logger.info("Chat %s cooldown set to %s by %s", chat_id, cooldown, message.from_user.id)
     await message.answer(f"Готово. Пауза между ответами: {_format_cooldown(cooldown)}.")
 
