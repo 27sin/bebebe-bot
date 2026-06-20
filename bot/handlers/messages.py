@@ -8,7 +8,9 @@ from aiogram.enums import ChatType
 from aiogram.types import Message
 
 from bot.handlers.user_target import user_label
+from bot.handlers.guess_commands import handle_guess_attempt
 from bot.services.attachments import parody_for_attachment
+from bot.services.guess_game import is_game_active
 from bot.services.edit_tracker import register_bot_reply, was_bot_reply_target
 from bot.services.rate_limit import can_reply_now, mark_replied
 from bot.services.reply_context import apply_reply_context
@@ -78,6 +80,9 @@ async def handle_group_message(message: Message) -> None:
     if not message.from_user or message.from_user.is_bot or not message.text:
         return
 
+    if await handle_guess_attempt(message):
+        return
+
     if not should_respond(message):
         logger.debug("Skip chat=%s message=%r", message.chat.id, message.text[:50])
         return
@@ -96,6 +101,9 @@ async def handle_group_message(message: Message) -> None:
 )
 async def handle_group_attachment(message: Message) -> None:
     if not message.from_user or message.from_user.is_bot:
+        return
+
+    if is_game_active(message.chat.id):
         return
 
     if not should_respond(message):

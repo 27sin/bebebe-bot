@@ -34,6 +34,10 @@ def build_help_text(chat_id: int) -> str:
         "/addrule — свои ответы на последнее слово\n"
         "/addrule слово — ответ\n"
         "/addrule слово reset — удалить правило\n\n"
+        "/guess — мини-игра «угадай пародию» (3 раунда)\n"
+        "/guess 5 — сессия из 5 раундов\n"
+        "/guess score — лидерборд\n"
+        "/guess stop — остановить игру\n\n"
         f"Значения по умолчанию бота: шанс {RANDOM_REPLY_PROBABILITY * 100:.0f}%, "
         f"пауза {DEFAULT_REPLY_COOLDOWN_SECONDS:g} сек."
     )
