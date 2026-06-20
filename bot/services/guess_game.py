@@ -27,6 +27,7 @@ MAX_ROUNDS = 10
 MIN_ROUNDS = 1
 ROUND_SECONDS = 60
 LEADERBOARD_LIMIT = 10
+FAILED_ROUND_COMMENT = "никто из долбоебов не справился"
 
 _bot: Bot | None = None
 _sessions: dict[int, GameSession] = {}
@@ -45,6 +46,7 @@ class GameSession:
     round_scores: dict[int, int] = field(default_factory=dict)
     round_labels: dict[int, str] = field(default_factory=dict)
     guess_attempts: set[int] = field(default_factory=set)
+    round_attempts: set[int] = field(default_factory=set)
     started_by: int = 0
     starter_label: str = ""
     participants: frozenset[int] | None = None
@@ -186,6 +188,7 @@ async def _start_round(session: GameSession) -> str | None:
     answer, parody = challenge
     session.answer = answer
     session.parody = parody
+    session.round_attempts.clear()
     session.round_token += 1
     session.expires_at = time.time() + ROUND_SECONDS
     session.rounds_started += 1
@@ -317,17 +320,64 @@ async def _round_timeout(chat_id: int, round_token: int) -> None:
     if session is None or session.round_token != round_token:
         return
 
-    await _on_round_timeout(chat_id)
+    await _on_round_timeout(chat_id, round_token=round_token)
 
 
-async def _on_round_timeout(chat_id: int) -> None:
+async def _on_round_timeout(chat_id: int, *, round_token: int | None = None) -> None:
     session = _sessions.get(chat_id)
     if session is None:
         return
 
+    token = round_token if round_token is not None else session.round_token
+    if session.round_token != token:
+        return
+
     answer = session.answer
-    header = f"⏱ Время вышло в раунде {session.current_round}/{session.total_rounds}.\nБыло: {answer}"
-    await _advance_or_finish(chat_id, header)
+    if session.extra_round:
+        round_label = "дополнительном раунде"
+    else:
+        round_label = f"раунде {session.current_round}/{session.total_rounds}"
+    header = f"⏱ Время вышло в {round_label}.\nБыло: {answer}"
+    await _end_round_without_winner(chat_id, header, round_token=token)
+
+
+async def _end_round_without_winner(chat_id: int, header: str, *, round_token: int) -> None:
+    session = _sessions.get(chat_id)
+    if session is None or session.round_token != round_token:
+        return
+
+    _cancel_timeout(chat_id)
+
+    if session.extra_round:
+        winners = _session_winners(session)
+        if len(winners) == 1:
+            await _finish_session(chat_id, header, outcome="winner")
+        elif len(winners) > 1:
+            await _finish_session(chat_id, header, outcome="tie_after_breaker")
+        else:
+            await _finish_session(chat_id, header, outcome="no_winner")
+        return
+
+    full_header = f"{header}\n\n{FAILED_ROUND_COMMENT}"
+
+    if session.current_round >= session.total_rounds:
+        if not session.guess_attempts:
+            await _finish_session(chat_id, full_header, outcome="silent")
+        else:
+            await _resolve_session_end(chat_id, full_header)
+        return
+
+    session.current_round += 1
+    round_text = await _start_round(session)
+    if round_text is None:
+        await _finish_session(
+            chat_id,
+            f"{full_header}\n\nНе удалось начать следующий раунд.",
+            outcome="no_winner",
+        )
+        return
+
+    await _send(chat_id, f"{full_header}\n\n{round_text}")
 
 
 async def _advance_or_finish(chat_id: int, header: str) -> None:
@@ -443,7 +493,7 @@ async def try_guess(chat_id: int, user_id: int, label: str, text: str) -> bool:
         return True
 
     if time.time() > session.expires_at:
-        await _on_round_timeout(chat_id)
+        await _on_round_timeout(chat_id, round_token=session.round_token)
         return True
 
     guess = normalize_guess(text)
@@ -451,6 +501,7 @@ async def try_guess(chat_id: int, user_id: int, label: str, text: str) -> bool:
         return True
 
     session.guess_attempts.add(user_id)
+    session.round_attempts.add(user_id)
     session.round_labels.setdefault(user_id, label)
 
     if guess != _normalize_answer(session.answer):
