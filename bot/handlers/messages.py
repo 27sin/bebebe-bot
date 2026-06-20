@@ -11,7 +11,13 @@ from bot.handlers.user_target import user_label
 from bot.handlers.guess_commands import handle_guess_attempt
 from bot.handlers.guess_duel_commands import handle_duel_flow
 from bot.handlers.guess_party_commands import handle_party_flow
-from bot.services.attachments import parody_for_attachment
+from bot.services.attachments import detect_attachment_type, parody_for_attachment
+from bot.services.easter_eggs import (
+    on_attachment_reply,
+    on_edit_reaction,
+    on_rare_reply,
+    on_text_reply,
+)
 from bot.services.guess_party import is_party_or_duel_blocking
 from bot.services.guess_game import is_game_active
 from bot.services.edit_tracker import register_bot_reply, was_bot_reply_target
@@ -43,6 +49,7 @@ async def _try_parody_reply(
     *,
     track_for_edits: bool = True,
     count_streak: bool = True,
+    attachment_type: str | None = None,
 ) -> None:
     if not message.from_user:
         return
@@ -69,6 +76,15 @@ async def _try_parody_reply(
             source,
             trigger_words,
         )
+        text = message.text or message.caption or ""
+        if source == "rare":
+            on_rare_reply(message.chat.id, message.from_user.id, parody)
+        elif source == "edit":
+            on_edit_reaction(message.chat.id, message.from_user.id)
+        elif attachment_type:
+            on_attachment_reply(message.chat.id, message.from_user.id, attachment_type)
+        elif text:
+            on_text_reply(message.chat.id, message.from_user.id, text, parody, source)
         logger.info("Replied in chat=%s (%s): %r", message.chat.id, source, parody)
     except Exception:
         logger.exception("Failed to send parody reply in chat=%s", message.chat.id)
@@ -127,7 +143,13 @@ async def handle_group_attachment(message: Message) -> None:
         return
 
     parody = apply_reply_context(message, parody) or parody
-    await _try_parody_reply(message, parody, "attachment")
+    attachment_type = detect_attachment_type(message)
+    await _try_parody_reply(
+        message,
+        parody,
+        "attachment",
+        attachment_type=attachment_type,
+    )
 
 
 @router.edited_message(F.chat.type.in_({ChatType.GROUP, ChatType.SUPERGROUP}))

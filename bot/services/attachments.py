@@ -14,18 +14,25 @@ ATTACHMENT_PARODIES: dict[str, str] = {
 
 
 def parody_for_attachment(message: Message) -> str | None:
+    attachment_type = detect_attachment_type(message)
+    if attachment_type is None:
+        return None
+    return ATTACHMENT_PARODIES.get(attachment_type)
+
+
+def detect_attachment_type(message: Message) -> str | None:
     if message.sticker:
-        return ATTACHMENT_PARODIES["sticker"]
+        return "sticker"
     if message.animation:
-        return ATTACHMENT_PARODIES["animation"]
+        return "animation"
     if message.photo:
-        return ATTACHMENT_PARODIES["photo"]
+        return "photo"
     if message.video:
-        return ATTACHMENT_PARODIES["video"]
+        return "video"
     if message.voice:
-        return ATTACHMENT_PARODIES["voice"]
+        return "voice"
     if message.location:
-        return ATTACHMENT_PARODIES["location"]
+        return "location"
     if message.document:
-        return ATTACHMENT_PARODIES["document"]
+        return "document"
     return None

@@ -1,0 +1,202 @@
+{
+  "version": 1,
+  "display": {
+    "show_names": false,
+    "profile_label": "Пасхалки"
+  },
+  "eggs": [
+    {
+      "id": "parody_two_words",
+      "kind": "single",
+      "group": "A",
+      "description": "Бот спародировал оба слова в сообщении из двух."
+    },
+    {
+      "id": "stop_bot",
+      "kind": "single",
+      "group": "B",
+      "words": ["бот"],
+      "description": "Стоп-слово: бот."
+    },
+    {
+      "id": "stop_zaebal",
+      "kind": "single",
+      "group": "B",
+      "words": ["заебал", "заебала", "заебали"],
+      "description": "Стоп-слово: заебал."
+    },
+    {
+      "id": "stop_huy",
+      "kind": "single",
+      "group": "B",
+      "words": ["хуй"],
+      "description": "Стоп-слово: хуй."
+    },
+    {
+      "id": "stop_molchi",
+      "kind": "single",
+      "group": "B",
+      "words": ["молчи", "заткнись"],
+      "description": "Стоп-слово: молчи."
+    },
+    {
+      "id": "stop_otstan",
+      "kind": "single",
+      "group": "B",
+      "words": ["отстань"],
+      "description": "Стоп-слово: отстань."
+    },
+    {
+      "id": "stop_stop",
+      "kind": "single",
+      "group": "B",
+      "words": ["стоп"],
+      "description": "Стоп-слово: стоп."
+    },
+    {
+      "id": "stop_help",
+      "kind": "single",
+      "group": "B",
+      "words": ["помощь", "help"],
+      "description": "Стоп-слово: помощь."
+    },
+    {
+      "id": "stop_idiot",
+      "kind": "single",
+      "group": "B",
+      "words": ["дурак", "idiot"],
+      "description": "Стоп-слово: дурак."
+    },
+    {
+      "id": "stop_tiho",
+      "kind": "single",
+      "group": "B",
+      "words": ["тихо"],
+      "description": "Стоп-слово: тихо."
+    },
+    {
+      "id": "stop_zachem",
+      "kind": "single",
+      "group": "B",
+      "words": ["зачем"],
+      "description": "Стоп-слово: зачем."
+    },
+    {
+      "id": "stop_pochemu",
+      "kind": "single",
+      "group": "B",
+      "words": ["почему"],
+      "description": "Стоп-слово: почему."
+    },
+    {
+      "id": "stop_ok",
+      "kind": "single",
+      "group": "B",
+      "words": ["ладно", "ок"],
+      "description": "Стоп-слово: ладно/ок."
+    },
+    {
+      "id": "stop_spasibo",
+      "kind": "single",
+      "group": "B",
+      "words": ["спасибо"],
+      "description": "Стоп-слово: спасибо."
+    },
+    {
+      "id": "stop_blya",
+      "kind": "single",
+      "group": "B",
+      "words": ["бля", "блин"],
+      "description": "Стоп-слово: бля/блин."
+    },
+    {
+      "id": "stop_da",
+      "kind": "single",
+      "group": "B",
+      "words": ["да"],
+      "description": "Стоп-слово: да."
+    },
+    {
+      "id": "stop_net",
+      "kind": "single",
+      "group": "B",
+      "words": ["нет"],
+      "description": "Стоп-слово: нет."
+    },
+    {
+      "id": "stop_maybe",
+      "kind": "single",
+      "group": "B",
+      "words": ["мейби", "maybe"],
+      "description": "Стоп-слово: maybe."
+    },
+    {
+      "id": "stop_pizda",
+      "kind": "single",
+      "group": "B",
+      "words": ["пизда"],
+      "description": "Стоп-слово: пизда."
+    },
+    {
+      "id": "stop_no",
+      "kind": "single",
+      "group": "B",
+      "words": ["но"],
+      "description": "Стоп-слово: но."
+    },
+    {
+      "id": "streak",
+      "kind": "tiered",
+      "group": "C",
+      "levels": [5, 10, 20, 30],
+      "description": "Серия ответов бота одному пользователю подряд."
+    },
+    {
+      "id": "rare_first",
+      "kind": "single",
+      "group": "D",
+      "description": "Первый редкий ответ бота (3%)."
+    },
+    {
+      "id": "rare_all",
+      "kind": "collection",
+      "group": "D",
+      "requires": 12,
+      "description": "Пойманы все 12 редких ответов."
+    },
+    {
+      "id": "attach_all",
+      "kind": "collection",
+      "group": "E",
+      "requires": 7,
+      "attachment_types": ["photo", "video", "animation", "sticker", "voice", "document", "location"],
+      "description": "Ответы бота на все типы вложений."
+    },
+    {
+      "id": "edit_reaction",
+      "kind": "single",
+      "group": "G",
+      "description": "Реакция на редактирование сообщения после ответа бота."
+    },
+    {
+      "id": "game_first_win",
+      "kind": "single",
+      "group": "H",
+      "description": "Первая победа в «Угадай пародию» в чате."
+    }
+  ],
+  "rare_replies": [
+    "я устал",
+    "не сегодня",
+    "мб потом",
+    "...",
+    "ой",
+    "лол",
+    "окак",
+    "вы эти все одинаковые",
+    "мимо",
+    "не надо",
+    "потом",
+    "ща занят"
+  ]
+}

@@ -346,6 +346,10 @@ async def _finish_session(chat_id: int, header: str, *, outcome: str) -> None:
     )
 
     if outcome in {"winner", "tie_after_breaker"} and winners_base:
+        from bot.services.easter_eggs import on_game_first_win
+
+        for user_id, _label in winners_base:
+            on_game_first_win(chat_id, user_id)
         record_leaderboard_wins(chat_id, winners_base)
 
     await _send(chat_id, _build_finale_message(session, header, outcome))

@@ -30,6 +30,7 @@ from bot.services.settings import (
 )
 from bot.services.stats import build_stats_message, stats_period_help
 from bot.services.game_stats import build_game_stats_message, game_stats_period_help
+from bot.services.profile import build_profile_message
 from bot.services.titles import build_titles_message
 
 logger = logging.getLogger(__name__)
@@ -46,6 +47,7 @@ UNIGNORE_PATTERN = re.compile(r"^/unignore(?:@\w+)?(?:\s+(.+))?$", re.IGNORECASE
 STATS_PATTERN = re.compile(r"^/stats(?:@\w+)?(?:\s+(\S+))?$", re.IGNORECASE)
 GAMESTATS_PATTERN = re.compile(r"^/gamestats(?:@\w+)?(?:\s+(\S+))?$", re.IGNORECASE)
 TITLES_PATTERN = re.compile(r"^/titles(?:@\w+)?(?:\s*(.*))?$", re.IGNORECASE)
+ME_PATTERN = re.compile(r"^/me(?:@\w+)?$", re.IGNORECASE)
 ADDRULE_PATTERN = re.compile(r"^/addrule(?:@\w+)?(?:\s+(.+))?$", re.IGNORECASE)
 TRIGGER_WORD_PATTERN = re.compile(r"^[A-Za-zА-Яа-яЁё0-9]+$")
 MENTION_PATTERN = re.compile(r"@([A-Za-z0-9_]{4,})")
@@ -446,6 +448,20 @@ async def handle_titles(message: Message) -> None:
 
     await message.answer(
         build_titles_message(
+            message.chat.id,
+            message.from_user.id,
+            user_label(message.from_user),
+        )
+    )
+
+
+@router.message(F.text.regexp(ME_PATTERN))
+async def handle_me(message: Message) -> None:
+    if not message.from_user:
+        return
+
+    await message.answer(
+        build_profile_message(
             message.chat.id,
             message.from_user.id,
             user_label(message.from_user),

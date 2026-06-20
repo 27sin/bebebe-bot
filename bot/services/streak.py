@@ -57,6 +57,10 @@ def record_streak(chat_id: int, user_id: int) -> int:
     entry["user_id"] = user_id
     entry["count"] = count
     _save_state(chats)
+
+    from bot.services.easter_eggs import on_streak_milestone
+
+    on_streak_milestone(chat_id, user_id, count)
     return count
 
 
