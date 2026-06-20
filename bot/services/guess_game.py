@@ -11,6 +11,12 @@ from typing import Any
 from aiogram import Bot
 
 from bot.config import PROJECT_ROOT
+from bot.services.game_stats import (
+    record_correct_guess,
+    record_guess_attempt,
+    record_session_end,
+    record_session_start,
+)
 from bot.services.rules import WORD_PATTERN, parody_word
 
 GAME_WORDS_PATH = PROJECT_ROOT / "rules" / "game_words.json"
@@ -38,8 +44,13 @@ class GameSession:
     expires_at: float
     round_scores: dict[int, int] = field(default_factory=dict)
     round_labels: dict[int, str] = field(default_factory=dict)
+    guess_attempts: set[int] = field(default_factory=set)
     started_by: int = 0
     starter_label: str = ""
+    participants: frozenset[int] | None = None
+    extra_round: bool = False
+    tiebreaker_for: frozenset[int] | None = None
+    rounds_started: int = 0
 
 
 def bind_bot(bot: Bot) -> None:
@@ -49,6 +60,11 @@ def bind_bot(bot: Bot) -> None:
 
 def is_game_active(chat_id: int) -> bool:
     return chat_id in _sessions
+
+
+def is_party_game_active(chat_id: int) -> bool:
+    session = _sessions.get(chat_id)
+    return session is not None and session.participants is not None
 
 
 def _load_game_words() -> list[str]:
@@ -172,35 +188,123 @@ async def _start_round(session: GameSession) -> str | None:
     session.parody = parody
     session.round_token += 1
     session.expires_at = time.time() + ROUND_SECONDS
+    session.rounds_started += 1
     _schedule_timeout(session.chat_id, session.round_token)
 
+    if session.extra_round:
+        round_line = "⚡ Дополнительный раунд (ничья)"
+    else:
+        round_line = f"Раунд {session.current_round}/{session.total_rounds}"
+
     return (
-        f"Раунд {session.current_round}/{session.total_rounds}\n"
+        f"{round_line}\n"
         f"Угадай слово: {parody}\n"
         f"⏱ {ROUND_SECONDS} сек"
     )
 
 
-async def _finish_session(chat_id: int, header: str) -> None:
+def _build_finale_message(session: GameSession, header: str, outcome: str) -> str:
+    lines = [header, "", "🏁 Игра окончена!", "", "Итог:", _session_scoreboard(session)]
+    winners = _session_winners(session)
+    suffix = " (party)" if session.participants is not None else ""
+
+    if outcome == "silent":
+        lines.extend(["", "Вы че ебанулись? Больше не буду с вами играть."])
+        return "\n".join(lines)
+
+    if outcome == "stopped":
+        if len(winners) == 1:
+            _, name = winners[0]
+            lines.extend(["", f"🏆 Лидирует: {name}"])
+        elif winners:
+            names = ", ".join(label for _, label in winners)
+            lines.extend(["", f"🤝 Ничья: {names}"])
+        return "\n".join(lines)
+
+    if outcome == "winner" and len(winners) == 1:
+        _, name = winners[0]
+        lines.extend(
+            [
+                "",
+                f"🏆 Победитель{suffix}: {name}",
+                f"🎉 Поздравляю, {name}! Ты победил в «Угадай пародию»!",
+                "+1 в лидерборд",
+            ]
+        )
+        return "\n".join(lines)
+
+    if outcome == "tie_after_breaker" and winners:
+        names = ", ".join(label for _, label in winners)
+        lines.extend(
+            [
+                "",
+                f"🤝 Ничья{suffix}: {names}",
+                "После дополнительного раунда победителя нет — делите победу.",
+                "+1 в лидерборд каждому",
+            ]
+        )
+        return "\n".join(lines)
+
+    lines.extend(["", "Победителя нет — никто не угадал ни одного раунда."])
+    return "\n".join(lines)
+
+
+async def _finish_session(chat_id: int, header: str, *, outcome: str) -> None:
     session = _sessions.pop(chat_id, None)
     _cancel_timeout(chat_id)
     if session is None:
         return
 
     winners = _session_winners(session)
-    lines = [header, "", "Итог сессии:", _session_scoreboard(session)]
+    mode = "party" if session.participants is not None else "solo"
+    record_session_end(
+        chat_id,
+        mode=mode,
+        outcome=outcome,
+        rounds_played=session.rounds_started,
+        winners=winners if outcome in {"winner", "tie_after_breaker", "stopped"} else None,
+    )
 
-    if winners:
-        names = ", ".join(label for _, label in winners)
-        lines.append("")
-        lines.append(f"🏆 Победитель сессии: {names}")
+    if outcome in {"winner", "tie_after_breaker"} and winners:
         record_leaderboard_wins(chat_id, winners)
-        lines.append("+1 в лидерборд")
-    else:
-        lines.append("")
-        lines.append("Победителя нет — никто не угадал ни одного раунда.")
 
-    await _send(chat_id, "\n".join(lines))
+    await _send(chat_id, _build_finale_message(session, header, outcome))
+
+
+async def _resolve_session_end(chat_id: int, header: str) -> None:
+    session = _sessions.get(chat_id)
+    if session is None:
+        return
+
+    if not session.guess_attempts:
+        await _finish_session(chat_id, header, outcome="silent")
+        return
+
+    winners = _session_winners(session)
+    if len(winners) > 1:
+        names = ", ".join(label for _, label in winners)
+        session.extra_round = True
+        session.tiebreaker_for = frozenset(user_id for user_id, _ in winners)
+        round_text = await _start_round(session)
+        if round_text is None:
+            await _finish_session(
+                chat_id,
+                f"{header}\n\nНе удалось начать дополнительный раунд.",
+                outcome="tie_after_breaker",
+            )
+            return
+
+        await _send(
+            chat_id,
+            f"{header}\n\n🤝 Ничья: {names}\n⚡ Дополнительный раунд!\n\n{round_text}",
+        )
+        return
+
+    if len(winners) == 1:
+        await _finish_session(chat_id, header, outcome="winner")
+        return
+
+    await _finish_session(chat_id, header, outcome="no_winner")
 
 
 async def _round_timeout(chat_id: int, round_token: int) -> None:
@@ -233,14 +337,28 @@ async def _advance_or_finish(chat_id: int, header: str) -> None:
 
     _cancel_timeout(chat_id)
 
+    if session.extra_round:
+        winners = _session_winners(session)
+        if len(winners) == 1:
+            await _finish_session(chat_id, header, outcome="winner")
+        elif len(winners) > 1:
+            await _finish_session(chat_id, header, outcome="tie_after_breaker")
+        else:
+            await _finish_session(chat_id, header, outcome="no_winner")
+        return
+
     if session.current_round >= session.total_rounds:
-        await _finish_session(chat_id, header)
+        await _resolve_session_end(chat_id, header)
         return
 
     session.current_round += 1
     round_text = await _start_round(session)
     if round_text is None:
-        await _finish_session(chat_id, f"{header}\n\nНе удалось начать следующий раунд.")
+        await _finish_session(
+            chat_id,
+            f"{header}\n\nНе удалось начать следующий раунд.",
+            outcome="no_winner",
+        )
         return
 
     await _send(chat_id, f"{header}\n\n{round_text}")
@@ -251,9 +369,12 @@ async def start_session(
     rounds: int,
     starter_id: int,
     starter_label: str,
+    *,
+    participants: frozenset[int] | None = None,
 ) -> str:
     if is_game_active(chat_id):
-        return "Игра уже идёт. Дождись конца или /guess stop"
+        stop_cmd = "/guessparty stop" if participants is not None else "/guess stop"
+        return f"Игра уже идёт. Дождись конца или {stop_cmd}"
 
     rounds = max(MIN_ROUNDS, min(MAX_ROUNDS, rounds))
     session = GameSession(
@@ -266,6 +387,7 @@ async def start_session(
         expires_at=0.0,
         started_by=starter_id,
         starter_label=starter_label,
+        participants=participants,
     )
     _sessions[chat_id] = session
 
@@ -274,6 +396,24 @@ async def start_session(
         _sessions.pop(chat_id, None)
         _cancel_timeout(chat_id)
         return "Не получилось подобрать загадку. Попробуй ещё раз."
+
+    mode = "party" if participants is not None else "solo"
+    record_session_start(
+        chat_id,
+        starter_id,
+        starter_label,
+        mode=mode,
+        rounds=rounds,
+        party_size=len(participants) if participants is not None else None,
+    )
+
+    if participants is not None:
+        return (
+            f"👥 Party-режим — {len(participants)} участник(ов).\n"
+            f"{rounds} раунд(а) по {ROUND_SECONDS} сек.\n"
+            f"Ответы засчитываются только участникам.\n\n"
+            f"{round_text}"
+        )
 
     return (
         f"🎮 Угадай пародию!\n"
@@ -286,7 +426,8 @@ async def start_session(
 async def stop_session(chat_id: int) -> str | None:
     if not is_game_active(chat_id):
         return "Сейчас нет активной игры."
-    await _finish_session(chat_id, "🛑 Игра остановлена.")
+    header = "🛑 Party-игра остановлена." if is_party_game_active(chat_id) else "🛑 Игра остановлена."
+    await _finish_session(chat_id, header, outcome="stopped")
     return None
 
 
@@ -294,6 +435,12 @@ async def try_guess(chat_id: int, user_id: int, label: str, text: str) -> bool:
     session = _sessions.get(chat_id)
     if session is None:
         return False
+
+    if session.participants is not None and user_id not in session.participants:
+        return True
+
+    if session.tiebreaker_for is not None and user_id not in session.tiebreaker_for:
+        return True
 
     if time.time() > session.expires_at:
         await _on_round_timeout(chat_id)
@@ -303,11 +450,16 @@ async def try_guess(chat_id: int, user_id: int, label: str, text: str) -> bool:
     if not guess:
         return True
 
+    session.guess_attempts.add(user_id)
+    session.round_labels.setdefault(user_id, label)
+
     if guess != _normalize_answer(session.answer):
+        record_guess_attempt(chat_id, user_id, label)
         return True
 
     session.round_scores[user_id] = session.round_scores.get(user_id, 0) + 1
     session.round_labels[user_id] = label
+    record_correct_guess(chat_id, user_id, label)
 
     header = (
         f"✅ {label} угадал!\n"
@@ -324,6 +476,10 @@ def game_help_text() -> str:
         "/guess 5 — сессия из 5 раундов\n"
         "/guess stop — остановить игру\n"
         "/guess score — лидерборд\n\n"
+        "Party:\n"
+        "/guessparty — лобби с подтверждением\n"
+        "/guessparty join|leave|stop\n\n"
+        "/gamestats — статистика игр в чате\n\n"
         "Бот показывает пародию — угадай исходное слово.\n"
         "Победитель сессии получает +1 в лидерборд."
     )

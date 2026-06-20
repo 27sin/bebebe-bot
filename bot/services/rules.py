@@ -5,6 +5,9 @@ import re
 from bot.services.settings import get_custom_rule
 
 WORD_PATTERN = re.compile(r"[A-Za-zА-Яа-яЁё0-9]+")
+CYRILLIC_LETTER = re.compile(r"[А-Яа-яЁё]")
+LATIN_LETTER = re.compile(r"[A-Za-z]")
+FOREIGN_LANGUAGE_REPLY = "иностранный язык — не мое"
 HYPHEN_TO_PATTERN = re.compile(
     r"([A-Za-zА-Яа-яЁё0-9]+)[-—](то)\b",
     re.IGNORECASE,
@@ -71,6 +74,15 @@ def _last_word(text: str) -> str | None:
 
 def extract_words(text: str) -> list[str]:
     return WORD_PATTERN.findall(text)
+
+
+def is_foreign_word(word: str) -> bool:
+    if LATIN_LETTER.search(word):
+        return True
+    for char in word:
+        if char.isalpha() and not CYRILLIC_LETTER.match(char):
+            return True
+    return False
 
 
 def _is_vowel(char: str) -> bool:
@@ -312,6 +324,10 @@ def parody_with_rules(text: str, chat_id: int | None = None) -> str | None:
     if special:
         return special
 
+    last = _last_word(text)
+    if last and is_foreign_word(last):
+        return FOREIGN_LANGUAGE_REPLY
+
     hyphen_parody = _parody_hyphen_to(text)
     if hyphen_parody:
         return hyphen_parody
@@ -322,7 +338,6 @@ def parody_with_rules(text: str, chat_id: int | None = None) -> str | None:
         if two_word:
             return two_word
 
-    last = _last_word(text)
     if not last:
         return None
 

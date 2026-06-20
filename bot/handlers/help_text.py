@@ -31,6 +31,8 @@ def build_help_text(chat_id: int) -> str:
         "/unignore @ник — убрать из игнора\n\n"
         "/stats — статистика за 7 дней\n"
         "/stats day|week|month|all — за другой период\n\n"
+        "/gamestats — статистика игр в чате\n"
+        "/gamestats day|week|month|all\n\n"
         "/addrule — свои ответы на последнее слово\n"
         "/addrule слово — ответ\n"
         "/addrule слово reset — удалить правило\n\n"
@@ -38,6 +40,9 @@ def build_help_text(chat_id: int) -> str:
         "/guess 5 — сессия из 5 раундов\n"
         "/guess score — лидерборд\n"
         "/guess stop — остановить игру\n\n"
+        "/guessparty — party-режим с лобби и подтверждением\n"
+        "/guessparty join — войти в лобби\n"
+        "/guessparty stop — отменить party\n\n"
         f"Значения по умолчанию бота: шанс {RANDOM_REPLY_PROBABILITY * 100:.0f}%, "
         f"пауза {DEFAULT_REPLY_COOLDOWN_SECONDS:g} сек."
     )

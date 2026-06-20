@@ -29,6 +29,7 @@ from bot.services.settings import (
     set_user_reply_probability,
 )
 from bot.services.stats import build_stats_message, stats_period_help
+from bot.services.game_stats import build_game_stats_message, game_stats_period_help
 
 logger = logging.getLogger(__name__)
 
@@ -42,6 +43,7 @@ START_PATTERN = re.compile(r"^/start(?:@\w+)?$", re.IGNORECASE)
 IGNORE_PATTERN = re.compile(r"^/ignore(?:@\w+)?(?:\s+(.+))?$", re.IGNORECASE)
 UNIGNORE_PATTERN = re.compile(r"^/unignore(?:@\w+)?(?:\s+(.+))?$", re.IGNORECASE)
 STATS_PATTERN = re.compile(r"^/stats(?:@\w+)?(?:\s+(\S+))?$", re.IGNORECASE)
+GAMESTATS_PATTERN = re.compile(r"^/gamestats(?:@\w+)?(?:\s+(\S+))?$", re.IGNORECASE)
 ADDRULE_PATTERN = re.compile(r"^/addrule(?:@\w+)?(?:\s+(.+))?$", re.IGNORECASE)
 TRIGGER_WORD_PATTERN = re.compile(r"^[A-Za-zА-Яа-яЁё0-9]+$")
 MENTION_PATTERN = re.compile(r"@([A-Za-z0-9_]{4,})")
@@ -396,6 +398,24 @@ async def handle_stats(message: Message) -> None:
 
     period = arg or "week"
     await message.answer(build_stats_message(message.chat.id, period))
+
+
+@router.message(F.text.regexp(GAMESTATS_PATTERN))
+async def handle_gamestats(message: Message) -> None:
+    if not message.text:
+        return
+
+    match = GAMESTATS_PATTERN.match(message.text.strip())
+    if not match:
+        return
+
+    arg = (match.group(1) or "").strip().lower()
+    if arg in {"", "help", "?"}:
+        await message.answer(game_stats_period_help())
+        return
+
+    period = arg or "week"
+    await message.answer(build_game_stats_message(message.chat.id, period))
 
 
 @router.message(F.text.regexp(ADDRULE_PATTERN))
