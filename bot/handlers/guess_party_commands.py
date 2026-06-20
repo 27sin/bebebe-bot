@@ -7,6 +7,7 @@ from aiogram import F, Router
 from aiogram.enums import ChatType
 from aiogram.types import Message
 
+from bot.handlers.command_menus import send_command_menu
 from bot.handlers.user_target import user_label
 from bot.services.guess_party import (
     MAX_PARTY_PLAYERS,
@@ -18,7 +19,6 @@ from bot.services.guess_party import (
     is_party_pending_setup,
     join_party_lobby,
     leave_party_lobby,
-    party_help_text,
     stop_party,
 )
 from bot.services.guess_game import DEFAULT_ROUNDS, is_party_game_active, try_guess
@@ -49,7 +49,7 @@ async def handle_guessparty_command(message: Message) -> None:
     label = user_label(message.from_user)
 
     if arg in {"help", "?"}:
-        await message.answer(party_help_text())
+        await send_command_menu(message, "guessparty")
         return
 
     if arg == "stop":
@@ -81,12 +81,14 @@ async def handle_guessparty_command(message: Message) -> None:
         await message.answer(text)
         return
 
-    if arg in {"", "start"}:
+    if arg == "start":
         text = await begin_party_setup(chat_id, uid, label)
         await message.answer(text)
         return
 
-    await message.answer(party_help_text())
+    if arg in {"", "help", "?"}:
+        await send_command_menu(message, "guessparty")
+        return
 
 
 async def handle_party_setup_message(message: Message) -> bool:

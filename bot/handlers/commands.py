@@ -7,6 +7,7 @@ from aiogram import F, Router
 from aiogram.types import Message
 
 from bot.config import DEFAULT_REPLY_COOLDOWN_SECONDS, RANDOM_REPLY_PROBABILITY
+from bot.handlers.command_menus import send_command_menu
 from bot.handlers.help_text import build_help_text
 from bot.handlers.user_target import TargetUser, resolve_target_user, user_label
 from bot.services.settings import (
@@ -19,17 +20,14 @@ from bot.services.settings import (
     get_effective_reply_probability,
     get_reply_cooldown,
     get_reply_probability,
-    list_custom_rules,
-    list_ignored_users,
-    list_user_reply_probabilities,
     remove_ignored_user,
     set_custom_rule,
     set_reply_cooldown,
     set_reply_probability,
     set_user_reply_probability,
 )
-from bot.services.stats import build_stats_message, stats_period_help
-from bot.services.game_stats import build_game_stats_message, game_stats_period_help
+from bot.services.stats import build_stats_message
+from bot.services.game_stats import build_game_stats_message
 from bot.services.profile import build_profile_message
 from bot.services.titles import build_titles_message
 
@@ -164,15 +162,7 @@ async def handle_chance(message: Message) -> None:
     current = get_reply_probability(chat_id)
 
     if not arg:
-        default_note = ""
-        if current != RANDOM_REPLY_PROBABILITY:
-            default_note = f"\nПо умолчанию в боте: {_format_percent(RANDOM_REPLY_PROBABILITY)}."
-        await message.answer(
-            f"Шанс случайного ответа в этом чате: {_format_percent(current)}.{default_note}\n"
-            "Изменить: /chance 95 или /chance 0.95\n"
-            "Сброс: /chance reset\n"
-            "Для участника: /userchance @ник 50"
-        )
+        await send_command_menu(message, "chance")
         return
 
     try:
@@ -207,15 +197,7 @@ async def handle_cooldown(message: Message) -> None:
     current = get_reply_cooldown(chat_id)
 
     if not arg:
-        default_note = ""
-        if current != DEFAULT_REPLY_COOLDOWN_SECONDS:
-            default_note = f"\nПо умолчанию в боте: {_format_cooldown(DEFAULT_REPLY_COOLDOWN_SECONDS)}."
-        await message.answer(
-            f"Пауза между ответами в этом чате: {_format_cooldown(current)}.{default_note}\n"
-            "Изменить: /cooldown 2\n"
-            "Без ограничения: /cooldown 0\n"
-            "Сброс: /cooldown reset"
-        )
+        await send_command_menu(message, "cooldown")
         return
 
     try:
@@ -249,21 +231,7 @@ async def handle_user_chance(message: Message) -> None:
     chat_id = message.chat.id
 
     if not arg:
-        users = list_user_reply_probabilities(chat_id)
-        if not users:
-            await message.answer(
-                "Персональных шансов пока нет.\n"
-                "Примеры:\n"
-                "/userchance @ник 80\n"
-                "/userchance 80 — reply на сообщение участника\n"
-                "/userchance @ник reset"
-            )
-            return
-
-        lines = [
-            f"{_format_user_key(key)}: {_format_percent(value)}" for key, value in users
-        ]
-        await message.answer("Персональные шансы:\n" + "\n".join(lines))
+        await send_command_menu(message, "userchance")
         return
 
     try:
@@ -337,15 +305,7 @@ async def handle_ignore(message: Message) -> None:
     arg = match.group(1)
 
     if not arg:
-        ignored = list_ignored_users(chat_id)
-        if not ignored:
-            await message.answer(
-                "Игнор-лист пуст.\n"
-                "Добавить: /ignore @ник или reply на сообщение + /ignore"
-            )
-            return
-        lines = [_format_user_key(key) for key in ignored]
-        await message.answer("Бот не трогает:\n" + "\n".join(lines))
+        await send_command_menu(message, "ignore")
         return
 
     target = _resolve_ignore_target(message, arg)
@@ -397,11 +357,10 @@ async def handle_stats(message: Message) -> None:
 
     arg = (match.group(1) or "").strip().lower()
     if arg in {"", "help", "?"}:
-        await message.answer(stats_period_help())
+        await send_command_menu(message, "stats")
         return
 
-    period = arg or "week"
-    await message.answer(build_stats_message(message.chat.id, period))
+    await message.answer(build_stats_message(message.chat.id, arg))
 
 
 @router.message(F.text.regexp(GAMESTATS_PATTERN))
@@ -415,11 +374,10 @@ async def handle_gamestats(message: Message) -> None:
 
     arg = (match.group(1) or "").strip().lower()
     if arg in {"", "help", "?"}:
-        await message.answer(game_stats_period_help())
+        await send_command_menu(message, "gamestats")
         return
 
-    period = arg or "week"
-    await message.answer(build_game_stats_message(message.chat.id, period))
+    await message.answer(build_game_stats_message(message.chat.id, arg))
 
 
 @router.message(F.text.regexp(TITLES_PATTERN))
@@ -482,20 +440,7 @@ async def handle_addrule(message: Message) -> None:
     arg = match.group(1)
 
     if not arg:
-        rules = list_custom_rules(chat_id)
-        if not rules:
-            await message.answer(
-                "Своих правил пока нет.\n"
-                "Примеры:\n"
-                "/addrule пиво — пивасик\n"
-                "/addrule пиво пивасик\n"
-                "/addrule пиво reset — удалить правило"
-            )
-            return
-        lines = [f"• {trigger} → {response}" for trigger, response in rules]
-        await message.answer(
-            "Правила чата (последнее слово → ответ):\n" + "\n".join(lines)
-        )
+        await send_command_menu(message, "addrule")
         return
 
     parts = arg.strip().split(None, 1)

@@ -7,11 +7,11 @@ from aiogram import F, Router
 from aiogram.enums import ChatType
 from aiogram.types import Message
 
+from bot.handlers.command_menus import send_command_menu
 from bot.handlers.user_target import resolve_target_user, user_label
 from bot.services.guess_duel import (
     accept_duel,
     create_duel,
-    duel_help_text,
     is_duel_lobby_active,
     stop_duel,
 )
@@ -50,7 +50,7 @@ async def handle_guessduel_command(message: Message) -> None:
     label = user_label(message.from_user)
 
     if arg in {"help", "?"}:
-        await message.answer(duel_help_text())
+        await send_command_menu(message, "guessduel")
         return
 
     if arg == "stop":
@@ -72,10 +72,7 @@ async def handle_guessduel_command(message: Message) -> None:
 
     target = _parse_opponent(message, raw_arg)
     if target is None:
-        await message.answer(
-            "Укажи соперника: /guessduel @ник\n"
-            "Или прими вызов: /guessduel accept"
-        )
+        await send_command_menu(message, "guessduel")
         return
 
     rounds = DEFAULT_ROUNDS

@@ -7,13 +7,13 @@ from aiogram import F, Router
 from aiogram.enums import ChatType
 from aiogram.types import Message
 
+from bot.handlers.command_menus import send_command_menu
 from bot.handlers.user_target import user_label
 from bot.services.guess_duel import is_duel_lobby_active
 from bot.services.guess_party import is_party_lobby_active, is_party_pending_setup
 from bot.services.guess_game import (
     DEFAULT_ROUNDS,
     build_leaderboard_message,
-    game_help_text,
     is_game_active,
     is_restricted_game_active,
     start_session,
@@ -51,7 +51,11 @@ async def handle_guess_command(message: Message) -> None:
         await message.answer("Сейчас открыта дуэль. /guessduel accept или /guessduel stop")
         return
 
-    if arg in {"", "start"}:
+    if arg in {"", "help", "?"}:
+        await send_command_menu(message, "guess")
+        return
+
+    if arg == "start":
         text = await start_session(
             chat_id,
             rounds=DEFAULT_ROUNDS,
@@ -59,10 +63,6 @@ async def handle_guess_command(message: Message) -> None:
             starter_label=user_label(message.from_user),
         )
         await message.answer(text)
-        return
-
-    if arg in {"help", "?"}:
-        await message.answer(game_help_text())
         return
 
     if arg == "stop":
@@ -86,7 +86,7 @@ async def handle_guess_command(message: Message) -> None:
         await message.answer(text)
         return
 
-    await message.answer(game_help_text())
+    await send_command_menu(message, "guess")
 
 
 async def handle_guess_attempt(message: Message) -> bool:
