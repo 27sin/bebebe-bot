@@ -27,18 +27,19 @@ def _trigger_words(text: str) -> tuple[str, ...]:
     return ()
 
 
-async def build_text_reply(message: Message) -> BuiltReply | None:
-    if not message.text or not message.from_user:
+async def build_text_reply(message: Message, *, skip_streak: bool = False) -> BuiltReply | None:
+    text = message.text or message.caption
+    if not text or not message.from_user:
         return None
 
-    text = message.text
     user_id = message.from_user.id
 
-    streak_reply = peek_streak_reply(message.chat.id, user_id)
-    if streak_reply:
-        reply = apply_reply_context(message, streak_reply)
-        if reply:
-            return BuiltReply(reply, "streak", _trigger_words(text))
+    if not skip_streak:
+        streak_reply = peek_streak_reply(message.chat.id, user_id)
+        if streak_reply:
+            reply = apply_reply_context(message, streak_reply)
+            if reply:
+                return BuiltReply(reply, "streak", _trigger_words(text))
 
     base = parody_with_rules(text, message.chat.id)
     source = "text"

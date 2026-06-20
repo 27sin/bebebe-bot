@@ -135,6 +135,7 @@ def build_stats_message(chat_id: int, period: str = DEFAULT_PERIOD) -> str:
         "streak": "серии",
         "rare": "редкие",
         "reply_context": "контекст",
+        "edit": "редактуры",
     }
     source_lines = []
     for source, count in by_source.most_common():
