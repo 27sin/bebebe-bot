@@ -39,6 +39,11 @@ _STOP_WORD_REPLIES: tuple[tuple[frozenset[str], str], ...] = (
     (frozenset({"ладно", "ок"}), "угу"),
     (frozenset({"спасибо"}), "не за что"),
     (frozenset({"бля", "блин"}), "культура речи, дружище"),
+    (frozenset({"да"}), "пизда"),
+    (frozenset({"нет"}), "говна пакет"),
+    (frozenset({"мейби", "maybe"}), "хубабуба бейби"),
+    (frozenset({"пизда"}), "не матерись, заебал"),
+    (frozenset({"но"}), "говно"),
 )
 
 VOWEL_PREFIX = {
