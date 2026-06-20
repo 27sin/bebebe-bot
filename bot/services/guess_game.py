@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import asyncio
 import json
+import logging
 import random
 import time
 from dataclasses import dataclass, field
@@ -29,9 +30,13 @@ ROUND_SECONDS = 60
 LEADERBOARD_LIMIT = 10
 FAILED_ROUND_COMMENT = "никто из долбоебов не справился"
 
+logger = logging.getLogger(__name__)
+
 _bot: Bot | None = None
 _sessions: dict[int, GameSession] = {}
 _timeout_tasks: dict[int, asyncio.Task[None]] = {}
+_round_locks: dict[int, asyncio.Lock] = {}
+_watchdog_task: asyncio.Task[None] | None = None
 
 
 @dataclass
@@ -56,8 +61,13 @@ class GameSession:
 
 
 def bind_bot(bot: Bot) -> None:
-    global _bot
+    global _bot, _watchdog_task
     _bot = bot
+    if _watchdog_task is None or _watchdog_task.done():
+        _watchdog_task = asyncio.create_task(
+            _session_watchdog(),
+            name="guess-session-watchdog",
+        )
 
 
 def is_game_active(chat_id: int) -> bool:
@@ -101,15 +111,46 @@ def _cancel_timeout(chat_id: int) -> None:
         task.cancel()
 
 
-def _schedule_timeout(chat_id: int, round_token: int) -> None:
+def _chat_lock(chat_id: int) -> asyncio.Lock:
+    lock = _round_locks.get(chat_id)
+    if lock is None:
+        lock = asyncio.Lock()
+        _round_locks[chat_id] = lock
+    return lock
+
+
+def _schedule_timeout(chat_id: int, round_token: int, expires_at: float) -> None:
     _cancel_timeout(chat_id)
-    _timeout_tasks[chat_id] = asyncio.create_task(_round_timeout(chat_id, round_token))
+    _timeout_tasks[chat_id] = asyncio.create_task(
+        _round_timeout(chat_id, round_token, expires_at),
+        name=f"guess-timeout-{chat_id}-{round_token}",
+    )
+
+
+async def _session_watchdog() -> None:
+    while True:
+        try:
+            await asyncio.sleep(1)
+            now = time.time()
+            for chat_id in list(_sessions):
+                session = _sessions.get(chat_id)
+                if session is None or now <= session.expires_at:
+                    continue
+                await _on_round_timeout(chat_id, round_token=session.round_token)
+        except asyncio.CancelledError:
+            return
+        except Exception:
+            logger.exception("Guess session watchdog failed")
 
 
 async def _send(chat_id: int, text: str) -> None:
     if _bot is None:
+        logger.warning("Guess message skipped: bot is not bound chat=%s", chat_id)
         return
-    await _bot.send_message(chat_id, text)
+    try:
+        await _bot.send_message(chat_id, text)
+    except Exception:
+        logger.exception("Failed to send guess message chat=%s", chat_id)
 
 
 def _session_scoreboard(session: GameSession) -> str:
@@ -192,7 +233,7 @@ async def _start_round(session: GameSession) -> str | None:
     session.round_token += 1
     session.expires_at = time.time() + ROUND_SECONDS
     session.rounds_started += 1
-    _schedule_timeout(session.chat_id, session.round_token)
+    _schedule_timeout(session.chat_id, session.round_token, session.expires_at)
 
     if session.extra_round:
         round_line = "⚡ Дополнительный раунд (ничья)"
@@ -255,6 +296,7 @@ def _build_finale_message(session: GameSession, header: str, outcome: str) -> st
 async def _finish_session(chat_id: int, header: str, *, outcome: str) -> None:
     session = _sessions.pop(chat_id, None)
     _cancel_timeout(chat_id)
+    _round_locks.pop(chat_id, None)
     if session is None:
         return
 
@@ -310,35 +352,34 @@ async def _resolve_session_end(chat_id: int, header: str) -> None:
     await _finish_session(chat_id, header, outcome="no_winner")
 
 
-async def _round_timeout(chat_id: int, round_token: int) -> None:
+async def _round_timeout(chat_id: int, round_token: int, expires_at: float) -> None:
     try:
-        await asyncio.sleep(ROUND_SECONDS)
+        delay = expires_at - time.time()
+        if delay > 0:
+            await asyncio.sleep(delay)
     except asyncio.CancelledError:
-        return
-
-    session = _sessions.get(chat_id)
-    if session is None or session.round_token != round_token:
         return
 
     await _on_round_timeout(chat_id, round_token=round_token)
 
 
 async def _on_round_timeout(chat_id: int, *, round_token: int | None = None) -> None:
-    session = _sessions.get(chat_id)
-    if session is None:
-        return
+    async with _chat_lock(chat_id):
+        session = _sessions.get(chat_id)
+        if session is None:
+            return
 
-    token = round_token if round_token is not None else session.round_token
-    if session.round_token != token:
-        return
+        token = round_token if round_token is not None else session.round_token
+        if session.round_token != token:
+            return
 
-    answer = session.answer
-    if session.extra_round:
-        round_label = "дополнительном раунде"
-    else:
-        round_label = f"раунде {session.current_round}/{session.total_rounds}"
-    header = f"⏱ Время вышло в {round_label}.\nБыло: {answer}"
-    await _end_round_without_winner(chat_id, header, round_token=token)
+        answer = session.answer
+        if session.extra_round:
+            round_label = "дополнительном раунде"
+        else:
+            round_label = f"раунде {session.current_round}/{session.total_rounds}"
+        header = f"⏱ Время вышло в {round_label}.\nБыло: {answer}"
+        await _end_round_without_winner(chat_id, header, round_token=token)
 
 
 async def _end_round_without_winner(chat_id: int, header: str, *, round_token: int) -> None:
@@ -381,37 +422,38 @@ async def _end_round_without_winner(chat_id: int, header: str, *, round_token: i
 
 
 async def _advance_or_finish(chat_id: int, header: str) -> None:
-    session = _sessions.get(chat_id)
-    if session is None:
-        return
+    async with _chat_lock(chat_id):
+        session = _sessions.get(chat_id)
+        if session is None:
+            return
 
-    _cancel_timeout(chat_id)
+        _cancel_timeout(chat_id)
 
-    if session.extra_round:
-        winners = _session_winners(session)
-        if len(winners) == 1:
-            await _finish_session(chat_id, header, outcome="winner")
-        elif len(winners) > 1:
-            await _finish_session(chat_id, header, outcome="tie_after_breaker")
-        else:
-            await _finish_session(chat_id, header, outcome="no_winner")
-        return
+        if session.extra_round:
+            winners = _session_winners(session)
+            if len(winners) == 1:
+                await _finish_session(chat_id, header, outcome="winner")
+            elif len(winners) > 1:
+                await _finish_session(chat_id, header, outcome="tie_after_breaker")
+            else:
+                await _finish_session(chat_id, header, outcome="no_winner")
+            return
 
-    if session.current_round >= session.total_rounds:
-        await _resolve_session_end(chat_id, header)
-        return
+        if session.current_round >= session.total_rounds:
+            await _resolve_session_end(chat_id, header)
+            return
 
-    session.current_round += 1
-    round_text = await _start_round(session)
-    if round_text is None:
-        await _finish_session(
-            chat_id,
-            f"{header}\n\nНе удалось начать следующий раунд.",
-            outcome="no_winner",
-        )
-        return
+        session.current_round += 1
+        round_text = await _start_round(session)
+        if round_text is None:
+            await _finish_session(
+                chat_id,
+                f"{header}\n\nНе удалось начать следующий раунд.",
+                outcome="no_winner",
+            )
+            return
 
-    await _send(chat_id, f"{header}\n\n{round_text}")
+        await _send(chat_id, f"{header}\n\n{round_text}")
 
 
 async def start_session(
@@ -474,10 +516,15 @@ async def start_session(
 
 
 async def stop_session(chat_id: int) -> str | None:
-    if not is_game_active(chat_id):
-        return "Сейчас нет активной игры."
-    header = "🛑 Party-игра остановлена." if is_party_game_active(chat_id) else "🛑 Игра остановлена."
-    await _finish_session(chat_id, header, outcome="stopped")
+    async with _chat_lock(chat_id):
+        if not is_game_active(chat_id):
+            return "Сейчас нет активной игры."
+        header = (
+            "🛑 Party-игра остановлена."
+            if is_party_game_active(chat_id)
+            else "🛑 Игра остановлена."
+        )
+        await _finish_session(chat_id, header, outcome="stopped")
     return None
 
 
