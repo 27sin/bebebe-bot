@@ -8,12 +8,12 @@ from bot.config import PROJECT_ROOT
 
 STREAK_PATH = PROJECT_ROOT / "data" / "streaks.json"
 
-STREAK_TIERS: tuple[tuple[int, str], ...] = (
-    (30, "да сколько можно, заебал"),
-    (20, "бро, это уже просто система"),
-    (10, "ну всё, опять ты"),
-    (5, "опять ты"),
-)
+STREAK_MILESTONES: dict[int, str] = {
+    5: "опять ты",
+    10: "ну всё, опять ты",
+    20: "бро, это уже просто система",
+    30: "да сколько можно, заебал",
+}
 
 
 def _load_state() -> dict[str, dict[str, Any]]:
@@ -40,10 +40,7 @@ def next_streak_count(chat_id: int, user_id: int) -> int:
 
 
 def streak_reply_for_count(count: int) -> str | None:
-    for threshold, message in STREAK_TIERS:
-        if count >= threshold:
-            return message
-    return None
+    return STREAK_MILESTONES.get(count)
 
 
 def peek_streak_reply(chat_id: int, user_id: int) -> str | None:
