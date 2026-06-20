@@ -17,9 +17,15 @@ NO_PREFIX = "хуй"
 NO_SUFFIX = "но"
 HU_PREFIX = "ху"
 
-_SPECIAL_LAST_WORD_REPLIES: tuple[tuple[frozenset[str], str], ...] = (
+_NAME_REPLIES: tuple[tuple[frozenset[str], str], ...] = (
     (frozenset({"макс", "максим", "максон"}), "Макс — красавчик"),
     (frozenset({"женя", "евгений", "женек", "женёк"}), "Женя — пидор❤"),
+)
+
+_STOP_WORD_REPLIES: tuple[tuple[frozenset[str], str], ...] = (
+    (frozenset({"бот"}), "да, я бот"),
+    (frozenset({"заебал", "заебала", "заебали"}), "я только начал"),
+    (frozenset({"хуй"}), "отнимаешь мою работу"),
 )
 
 VOWEL_PREFIX = {
@@ -251,19 +257,22 @@ def parody_word(word: str) -> str:
     return _join_parody(prefix, suffix)
 
 
-def _special_last_word_reply(text: str) -> str | None:
+def _fixed_last_word_reply(text: str) -> str | None:
     last = _last_word(text)
     if not last:
         return None
     normalized = last.lower()
-    for names, reply in _SPECIAL_LAST_WORD_REPLIES:
+    for names, reply in _NAME_REPLIES:
         if normalized in names:
+            return reply
+    for words, reply in _STOP_WORD_REPLIES:
+        if normalized in words:
             return reply
     return None
 
 
 def is_special_reply(text: str) -> bool:
-    return _special_last_word_reply(text) is not None
+    return _fixed_last_word_reply(text) is not None
 
 
 def _parody_two_words(words: list[str]) -> str | None:
@@ -277,7 +286,7 @@ def _parody_two_words(words: list[str]) -> str | None:
 
 
 def parody_with_rules(text: str) -> str | None:
-    special = _special_last_word_reply(text)
+    special = _fixed_last_word_reply(text)
     if special:
         return special
 
